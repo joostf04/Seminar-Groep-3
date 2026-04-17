@@ -36,13 +36,18 @@ ST_START        = pd.Timestamp("1979-01-01")   # first date reported for S_t
 # The row we predict is the row whose date == OOS_START_PRED.
 
 oos_mask  = (df["date"] >= FORECAST_START) & (df["date"] <= OOS_END_PRED)
-oos_index = df.index[oos_mask].tolist()         # indices of rows to predict
-n_oos     = len(oos_index)
+oos_index = df.index[oos_mask].tolist()         # extended indices (1965+) for rolling windows
+oos_mask_eval = (df["date"] >= OOS_START_PRED) & (df["date"] <= OOS_END_PRED)
+oos_index_eval = df.index[oos_mask_eval].tolist()  # evaluation indices (1979+)
+n_oos     = len(oos_index_eval)
 n_insample = (df["date"] <= IN_SAMPLE_END).sum()
 print(f"In-sample obs (used for 1st prediction): {n_insample}")
-print(f"OOS periods to predict: {n_oos}  "
+print(f"Extended predictions (for rolling windows): {len(oos_index)}  "
       f"({df.loc[oos_index[0], 'date'].strftime('%Y-%m')} - "
-      f"{df.loc[oos_index[-1], 'date'].strftime('%Y-%m')})\n")
+      f"{df.loc[oos_index[-1], 'date'].strftime('%Y-%m')})")
+print(f"OOS evaluation period: {n_oos}  "
+      f"({df.loc[oos_index_eval[0], 'date'].strftime('%Y-%m')} - "
+      f"{df.loc[oos_index_eval[-1], 'date'].strftime('%Y-%m')})\n")
 
 # ── Storage ────────────────────────────────────────────────────────────────────
 results = {}   # predictor -> DataFrame with columns: date, actual, predicted
@@ -139,13 +144,14 @@ combined["predicted_1N_cost"] = combined["predicted_1N"] - cost
 actuals_df = df[["date", "eqprem"]].copy()
 combined   = pd.merge(combined, actuals_df, on="date", how="left")
 
-# Metrics for 1/N
-errs_1n  = combined["eqprem"] - combined["predicted_1N"]
+# Metrics for 1/N — evaluation period only (1979+)
+eval_mask_1n = combined["date"] >= OOS_START_PRED
+errs_1n  = combined.loc[eval_mask_1n, "eqprem"] - combined.loc[eval_mask_1n, "predicted_1N"]
 msfe_1n  = (errs_1n ** 2).mean()
 
-# Benchmark MSFE (prevailing mean)
+# Benchmark MSFE (prevailing mean) — evaluation period only (1979+)
 hist_means_1n, hist_actuals_1n = [], []
-for oos_row in oos_index:
+for oos_row in oos_index_eval:
     oos_date   = df.loc[oos_row, "date"]
     train_mask = df["date"] < oos_date
     if train_mask.sum() < 5:
@@ -155,8 +161,8 @@ for oos_row in oos_index:
 bm_msfe_1n = np.mean((np.array(hist_actuals_1n) - np.array(hist_means_1n)) ** 2)
 oos_r2_1n  = 1 - msfe_1n / bm_msfe_1n
 
-# Metrics with cost
-errs_1n_cost  = combined["eqprem"] - combined["predicted_1N_cost"]
+# Metrics with cost — evaluation period only (1979+)
+errs_1n_cost  = combined.loc[eval_mask_1n, "eqprem"] - combined.loc[eval_mask_1n, "predicted_1N_cost"]
 msfe_1n_cost  = (errs_1n_cost ** 2).mean()
 oos_r2_1n_cost  = 1 - msfe_1n_cost / bm_msfe_1n
 
@@ -486,6 +492,8 @@ print(f"  Fitting PCA({MAX_K}) once per OOS month; nested factor sets 1..K ...")
 
 for oos_row in oos_index:
     oos_date   = df.loc[oos_row, "date"]
+    if oos_date < OOS_START_PRED:
+        continue
     train_mask = lag_data["date"] < oos_date
     train      = lag_data[train_mask]
 
@@ -2108,11 +2116,46 @@ print("  Saved: plot_QLR_structural_break_monthly_unrestricted.png")
 print("\nStructural break tests complete.")
 
 ##################################################
-# Individual Predictor–Return Correlation Plots  #
-# (Pearson, colorblind-friendly)                 #
+# Return Variance Over Time (all windows)        #
 ##################################################
 
-print("\nComputing individual Pearson predictor–return correlations ...")
+print("\nPlotting return variance over time ...")
+
+_RV_COLORS = ["#0072B2", "#D55E00", "#009E73"]
+_RV_STYLES = ["-", "--", ":"]
+
+fig, ax = plt.subplots(figsize=(13, 6))
+for idx, W in enumerate(WINDOWS):
+    _rv = pd.Series(actual_vec).rolling(W).var().values
+    _mask = ~np.isnan(_rv)
+    ax.plot(np.array(dates_oos)[_mask], _rv[_mask],
+            color=_RV_COLORS[idx], linestyle=_RV_STYLES[idx],
+            linewidth=1.2, label=f"W = {W} months")
+
+ax.set_xlabel("Date", fontsize=13)
+ax.set_ylabel("Variance", fontsize=13)
+ax.set_title("Rolling Return Variance", fontsize=13)
+ax.tick_params(axis="both", labelsize=11)
+ax.xaxis.set_major_locator(mdates.YearLocator(5))
+ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+ax.set_xlim(left=pd.Timestamp("1979-01-01"), right=pd.Timestamp("2025-01-01"))
+plt.xticks(rotation=45)
+ax.legend(fontsize=11)
+ax.grid(True, alpha=0.3)
+fig.tight_layout()
+_fname_png = "plot_return_variance_monthly_unrestricted.png"
+_fname_pdf = "plot_return_variance_monthly_unrestricted.pdf"
+fig.savefig(_fname_png, dpi=300, bbox_inches="tight")
+fig.savefig(_fname_pdf, bbox_inches="tight")
+plt.close(fig)
+print(f"  Saved: {_fname_png} + {_fname_pdf}")
+
+##################################################
+# Individual Predictor–Return Correlation Plots  #
+# (Spearman, colorblind-friendly)                #
+##################################################
+
+print("\nComputing individual Spearman predictor\u2013return correlations ...")
 
 # Wong (2011) colorblind-safe palette (8 colours)
 _WONG = [
@@ -2142,7 +2185,7 @@ for W in WINDOWS:
         for i, pred in enumerate(forecast_cols):
             p_i = P_window[:, i]
             if np.std(p_i) > 0 and np.std(r_window) > 0:
-                row[pred] = float(np.corrcoef(r_window, p_i)[0, 1])
+                row[pred] = float(spearmanr(r_window, p_i).correlation)
             else:
                 row[pred] = np.nan
         _ipc_rows.append(row)
@@ -2163,7 +2206,7 @@ for W in WINDOWS:
 
     ax.set_xlabel("Date", fontsize=13)
     ax.set_ylabel("Correlation", fontsize=13)
-    ax.set_title(f"Individual Predictor\u2013Return Correlations (W = {W} months)",
+    ax.set_title(f"Individual Predictor Return Correlations (W = {W} months)",
                  fontsize=13)
     ax.tick_params(axis="both", labelsize=11)
     ax.xaxis.set_major_locator(mdates.YearLocator(5))
@@ -2176,8 +2219,8 @@ for W in WINDOWS:
               bbox_to_anchor=(0.5, -0.18), frameon=True, fancybox=False)
 
     fig.tight_layout(rect=[0, 0.12, 1, 1])
-    _fname_png = f"individual_predictor_corr_monthly_W{W}.png"
-    _fname_pdf = f"individual_predictor_corr_monthly_W{W}.pdf"
+    _fname_png = f"individual_predictor_corr_monthly_unrestricted_W{W}.png"
+    _fname_pdf = f"individual_predictor_corr_monthly_unrestricted_W{W}.pdf"
     fig.savefig(_fname_png, dpi=300, bbox_inches="tight")
     fig.savefig(_fname_pdf, bbox_inches="tight")
     plt.close(fig)

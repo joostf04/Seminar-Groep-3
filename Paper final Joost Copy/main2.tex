@@ -1,0 +1,90 @@
+\documentclass[a4paper,11pt]{article}
+
+% FILL OUT THE DETAILS BELOW:
+\author{
+\begin{tabular}{cc}
+Ruben Dunnewolt (661890) & Joost Fitton (659382) \\
+Luuk Jille (703714)     & Kevin Smit (707087)
+\end{tabular}
+}
+\title{The Post-1994 Breakdown of Equity Premium Combination Forecasts:
+A Variance Decomposition Approach}
+% \date{An optional custom date, the default is today}
+\newcommand{\program}{Econometrics \& Operations Research}
+\newcommand{\supervisor}{Sam van Meer}
+
+\usepackage[british]{babel} % Use British English
+\usepackage[onehalfspacing]{setspace} % Increase line spacing
+\usepackage[margin=2.5cm]{geometry} % Modify margins
+\usepackage{graphicx,booktabs} % Packages for images and tables
+\usepackage[authoryear]{natbib} % APA-style author-year citations
+
+% ADD YOUR OWN PACKAGES HERE
+\usepackage{array}
+\usepackage{threeparttable}
+\usepackage{siunitx}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage[counterclockwise]{rotating}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage[T1]{fontenc}
+\usepackage{titlesec}
+\usepackage{microtype}
+\usepackage{enumitem}
+\usepackage{subcaption}
+\usepackage{appendix}
+
+\begin{document}
+
+\begin{titlepage}
+\makeatletter
+\begin{center}
+	\textsc{Erasmus University Rotterdam}
+	\par \textsc{Erasmus School of Economics}
+	\par Seminar in Investing \program
+
+	\vspace{0.5cm} \hrule height .08em \bigskip
+	\par\huge\@title\bigskip
+	\par\Large\@author\bigskip
+	\hrule height .08em\normalsize
+	
+	\vspace{1cm} % small controlled space instead of stretch
+\includegraphics[width=\textwidth,height=0.15\textheight,keepaspectratio]{eur}
+
+\vspace{0.8cm}
+\begin{tabular}{ll}
+	
+		\toprule
+		Supervisor: & \supervisor\\
+		Date final version: & \@date\\
+		\bottomrule
+	\end{tabular}
+    \vspace{0.4cm}
+\begin{abstract}
+\noindent \citet{denkloffler2024} document a sharp post-1994 deterioration
+in equity premium combination forecast performance, attributing it to
+rising forecast error correlations, but do not identify what drives the
+deterioration. We decompose the forecast error covariance matrix into
+three components --- a return-variance term, a forecast--return
+cross-covariance term, and a forecast covariance term ---
+and show empirically that the deterioration is driven almost entirely by a
+collapse in the forecast--return cross-covariance component, with
+negligible contributions from the other two. The collapse is homogeneous
+across the predictor set rather than concentrated in individual predictors.
+We then evaluate four methodologically distinct remedies: two that
+restructure combination weights (scaled PCA and discounted MSFE) and two
+that localise the individual predictive regressions (rolling-window OLS
+and discounted OLS). None consistently outperforms the historical average
+post-1994 in either statistical or economic terms. The convergence of
+failure across these methodologically independent approaches confirms
+that the breakdown reflects a fundamental misalignment between
+macroeconomic predictors and realised returns rather than a failure of
+combination or estimation design. Structural break tests reinforce this
+interpretation: the deterioration does not coincide with a single sharp
+break but unfolds gradually through the sample.
+\end{abstract}
+\end{center}
+\makeatother
+
+\end{titlepage}
+\end{document}
