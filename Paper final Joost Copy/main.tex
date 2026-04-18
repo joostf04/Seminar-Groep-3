@@ -66,9 +66,8 @@ A Variance Decomposition Approach}
 in equity premium combination forecast performance, attributing it to
 rising forecast error correlations, but do not identify what drives the
 deterioration. We decompose the forecast error covariance matrix into
-three components --- a return-variance term, a forecast--return
-cross-covariance term, and a forecast covariance term ---
-and show empirically that the deterioration is driven almost entirely by a
+three components, a return-variance term, a forecast--return
+cross-covariance term, and a forecast covariance term, and show empirically that the deterioration is driven almost entirely by a
 collapse in the forecast--return cross-covariance component, with
 negligible contributions from the other two. The collapse is homogeneous
 across the predictor set rather than concentrated in individual predictors.
@@ -121,8 +120,8 @@ paper.
 
 Our contribution is threefold. \textit{First}, we develop an economically
 interpretable decomposition of the forecast error covariance matrix into
-three components --- a return-variance term, a forecast--return
-cross-covariance term, and a forecast covariance term --- and show
+three components, a return-variance term, a forecast--return
+cross-covariance term, and a forecast covariance term, and show
 empirically that the post-1994 deterioration is driven almost entirely by
 a collapse in the forecast--return cross-covariance component. The
 return-variance and forecast covariance components remain stable across
@@ -136,9 +135,9 @@ variance.
 
 \textit{Second}, we systematically evaluate four methodologically distinct
 remedies, each targeting a different plausible failure mode implied by the
-diagnosis. Two act at the combination level --- scaled PCA
+diagnosis. Two act at the combination level, scaled PCA
 \citep[sPCA,][]{huang2022scale} and discounted-MSFE combination
-\citep{StockWatson2004} --- and two at the estimation level, rolling-window
+\citep{StockWatson2004}, and two at the estimation level, rolling-window
 and discounted OLS. None of the four consistently outperforms the
 historical average post-1994, in either statistical ($R^{2}_{OS}$) or
 economic (CER) terms.
@@ -150,7 +149,7 @@ localised estimation all fail in the same way, which confirms that the
 problem lies in the predictor--return signal itself rather than in
 combination or estimation design. Two pieces of evidence support this
 interpretation. DMSFE weights remain essentially equal throughout the
-sample --- the effective number of active predictors stays at roughly~$N$
+sample, the effective number of active predictors stays at roughly~$N$
 --- which confirms that the deterioration is homogeneous rather than
 predictor-specific. Structural break tests indicate that the deterioration
 does not coincide with a single sharp break but unfolds gradually: sup-F
@@ -201,11 +200,11 @@ Applying the law of total variance
 $\mathrm{Var}(r_{t+1}) =
 \mathbb{E}[\mathrm{Var}(r_{t+1} \mid \mathcal{F}_t)] +
 \mathrm{Var}(\mathbb{E}[r_{t+1} \mid \mathcal{F}_t])$ to the realised
-return, the covariance matrix of forecast errors decomposes as
+equity premium, the covariance matrix of forecast errors decomposes as
 \begin{equation}\label{eq:ltv-decomp}
     \Sigma_e =
     \underbrace{\mathbb{E}\!\left[\mathrm{Var}(r_{t+1} \mid \mathcal{F}_t)
-        \right]\iota\iota'}_{\text{common-return component}}
+        \right]\iota\iota'}_{\text{common-equity component}}
     \;+\;
     \underbrace{\mathrm{Var}\!\left(\mathbb{E}[r_{t+1} \mid \mathcal{F}_t]
         \,\iota - \hat{\mathbf{r}}_{t+1}\right)}_{\text{cross-forecast component}},
@@ -260,7 +259,7 @@ practice, we approximate $F(\mathcal{F}_t)$ with bivariate regressions on
 the Goyal--Welch predictor set, and the boundary between reducible and
 irreducible in our decomposition is drawn by \emph{that} set. If a richer
 predictor universe were available, some of what we assign to term~(i)
-empirically would shift into term~(ii) --- it is reducible in principle,
+empirically would shift into term~(ii), it is reducible in principle,
 just not by our instruments. Our estimates of the innovation variance
 should therefore be read as an upper bound on what the Goyal--Welch set
 can explain, not as a characterisation of fundamental unpredictability
@@ -311,7 +310,7 @@ $\mathrm{Cov}(\hat{r}_i, \hat{r}_j) = \hat{\beta}_{i,t}\hat{\beta}_{j,t}
 \mathrm{Cov}(x_i, x_j)$: forecast covariance inherits predictor
 covariance, weighted by the slope each predictor earns from its in-sample
 relation to returns. Two distinct forces can therefore drive
-$\mathrm{Var}(\hat{\mathbf{r}}_{t+1})$ upward --- the macro predictors
+$\mathrm{Var}(\hat{\mathbf{r}}_{t+1})$ upward, the macro predictors
 becoming more correlated with each other, or the bivariate slopes
 converging so that forecasts line up even when the underlying predictors
 remain distinct. The diagnostics in
@@ -348,7 +347,7 @@ moves with $r_{t+1}$ and there is exploitable signal; when $\rho_i = 0$
 the forecast is uninformative and the optimal choice collapses to the
 historical mean; when $\rho_i < 0$ the forecast points the wrong way, and
 the usable version of $\hat{r}_{i,t+1}$ is its sign-flipped
-counterpart --- something no combination or regression-based method in
+counterpart, something no combination or regression-based method in
 this paper implements. Hence a sign reversal in $\boldsymbol{\rho}$ is
 not one failure mode among several; it is mechanically equivalent to a
 collapse of usable predictability with the given predictor set, and the
@@ -361,8 +360,8 @@ The decomposition generates three mutually exclusive predictions about
 what must be changing in the data if combination forecast performance is
 deteriorating.
 
-If the \emph{return-variance} component rises --- for example because
-return volatility increases in a turbulent period --- then $\Sigma_e$
+If the \emph{return-variance} component rises, for example because
+return volatility increases in a turbulent period, then $\Sigma_e$
 increases uniformly. All forecasts are equally affected and no combination
 scheme can help, because this source of forecast error variance cannot be
 diversified away. Under this hypothesis, deterioration should coincide
@@ -392,7 +391,7 @@ To track the contributions of the three components over time, we construct
 two rolling correlation measures. Computing these in rolling windows
 allows us to detect structural changes in the forecast error covariance
 structure without imposing a single breakpoint. We use rolling windows of
-5, 10, and 15 years for both monthly and quarterly frequencies, and
+5, 10, and 15 years for both quarterly and monthly frequencies, and
 report both Pearson and Spearman versions: Pearson corresponds directly
 to the covariance decomposition, while Spearman is robust to outliers and
 non-normality in the equity premium.
@@ -606,8 +605,8 @@ mean model does not reject stability: sup-F~$=4.24$ against a 10\%
 critical value of $5.86$. The equity premium series itself does not
 exhibit a sharp break. Second, the individual bivariate predictive
 regressions show significant sup-F statistics for most predictors, but
-the estimated break dates cluster in the late 2000s --- around 2009 for
-the valuation ratios (D/P, D/Y, E/P, D/E, SVAR, B/M, DFY) --- rather than
+the estimated break dates cluster in the late 2000s, around 2009 for
+the valuation ratios (D/P, D/Y, E/P, D/E, SVAR, B/M, DFY), rather than
 around 1994. Third, and most informative for our purposes, the
 Bai--Perron procedure on the $1/N$ forecast errors identifies breaks at
 1973, 1982, 1991, 2000, and 2008 when five breaks are permitted. These
@@ -705,8 +704,8 @@ methodological remedy.
 \section{Methods}\label{sec:methods}
 % =====================================================================
 
-The diagnosis in Section~\ref{sec:decomposition} --- a homogeneous,
-gradual collapse in the forecast--return cross-covariance --- admits at
+The diagnosis in Section~\ref{sec:decomposition}, a homogeneous,
+gradual collapse in the forecast--return cross-covariance, admits at
 least two natural classes of methodological response. At the
 \emph{combination level}, one can replace equal weights with schemes that
 either reduce forecast-error co-movement through factor structure (sPCA)
@@ -801,7 +800,7 @@ specification did not meaningfully alter our conclusions.
 \subsubsection{Discounted MSFE Combination (DMSFE)}\label{subsubsec:dmsfe}
 
 If the post-1994 deterioration were driven by heterogeneous loss of
-predictive power --- some predictors retaining signal while others fail
+predictive power, some predictors retaining signal while others fail
 --- a natural remedy would be to reweight predictors based on their
 recent forecasting performance, downweighting those that have
 deteriorated. The DMSFE scheme of \citet{StockWatson2004} does exactly
@@ -854,12 +853,12 @@ window should repair the combination forecasts.
 Under rolling-window OLS, each bivariate predictive regression is
 estimated using only the most recent $W$ observations, so older data are
 dropped as new data arrive. We consider $W \in \{5, 10, 15\}$ years at
-both monthly and quarterly frequencies, and aggregate the resulting
+both quarterly and monthly frequencies, and aggregate the resulting
 individual forecasts using equal weights ($1/N$). Rolling-window OLS
 imposes a hard cutoff: observations just inside the window receive full
 weight, observations just outside receive zero weight. It is the natural
 remedy if the post-1994 breakdown reflects a well-defined structural
-break --- but less well suited if the deterioration is gradual, as
+break, but less well suited if the deterioration is gradual, as
 Section~\ref{subsec:breaks} suggests.
 
 \subsubsection{Discounted OLS (D-OLS)}\label{subsubsec:dols}
@@ -1003,7 +1002,7 @@ deterioration across the predictor set.
 \subsection{Do Any Methods Improve on the Historical Average Post-1994?}\label{subsec:stat-results}
 
 Table~\ref{tab:r2os_combined} reports $R^2_{\mathrm{OS}}$ for all four
-methods and both benchmarks, at monthly and quarterly frequencies and
+methods and both benchmarks, at quarterly and monthly frequencies and
 across the three subsamples.
 
 \begin{spacing}{1.0}
@@ -1069,9 +1068,9 @@ different script not in this replication package.
 
 Three patterns emerge. First, the $1/N$ benchmark itself turns negative
 post-1994 at both frequencies, reproducing the headline result of
-\citet{denkloffler2024}. Second, \emph{every} method --- sPCA direct at
+\citet{denkloffler2024}. Second, \emph{every} method, sPCA direct at
 both fixed and time-varying $K$, DMSFE at all three discount factors,
-and both rolling and discounted OLS at all window lengths --- produces a
+and both rolling and discounted OLS at all window lengths, produces a
 negative post-1994 $R^2_{\mathrm{OS}}$. None of the post-1994
 $R^2_{\mathrm{OS}}$ values is statistically distinguishable from the
 historical average under the \citet{clarkwest2007} test. The sPCA
@@ -1080,8 +1079,8 @@ the worst performer post-1994 ($-5.75$\% quarterly).
 
 Third, the pre-1994 pattern tells the complementary story. Many methods
 deliver statistically significant positive $R^2_{\mathrm{OS}}$ in the
-pre-1994 subsample --- $1/N$, sPCA direct $K=3$, DMSFE at all $\delta$,
-and D-OLS at the longer windows --- but none carries this
+pre-1994 subsample, $1/N$, sPCA direct $K=3$, DMSFE at all $\delta$,
+and D-OLS at the longer windows, but none carries this
 outperformance into the post-1994 subsample.
 
 Two features of the table deserve emphasis beyond the sign pattern.
@@ -1202,7 +1201,7 @@ costs, so these gains are robust to market frictions.
 
 Post-1994, the picture reverses. The $1/N$ combination produces a
 negative CER gain of $-23.7$~bps, and its breakeven transaction cost
-turns negative at $-34.7$~bps --- the strategy already loses money
+turns negative at $-34.7$~bps, the strategy already loses money
 before any trading costs are applied. DMSFE at all three discount
 factors delivers similarly negative post-1994 CER gains ($-15.7$ to
 $-24.4$~bps) with negative breakeven costs. sPCA direct with
@@ -1212,8 +1211,8 @@ $+42.2$~bps, but its 90\% confidence interval of $[-327.7,\ 384.1]$
 easily contains zero and its breakeven TC of 13.3~bps is low enough that
 any realistic frictions eliminate the gain.
 
-The uniform pattern --- pre-1994 gains, post-1994 losses, negative
-breakeven transaction costs post-1994 --- is inconsistent with any
+The uniform pattern, pre-1994 gains, post-1994 losses, negative
+breakeven transaction costs post-1994, is inconsistent with any
 story in which combination or estimation design is the binding
 constraint. A real-world investor following any of these strategies
 post-1994 would have destroyed value. As with the $R^2_{\mathrm{OS}}$
@@ -1340,7 +1339,7 @@ The implications for future work are twofold. If macroeconomic
 predictors are to remain central to equity premium forecasting, the
 research agenda needs to shift from combination methodology to
 explicit modelling of structural change in the predictor--return
-relationship itself --- for example, through regime-switching or
+relationship itself, for example, through regime-switching or
 time-varying-parameter models that allow the predictive relationships
 to evolve. Alternatively, if the predictor--return relationship has
 truly broken down in a way that cannot be modelled, the more productive
