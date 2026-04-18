@@ -1098,7 +1098,7 @@ ax.tick_params(axis="both", labelsize=12)
 ax.legend(fontsize=13)
 ax.grid(True, alpha=0.3)
 fig.tight_layout()
-fig.savefig("plot_S_fr_combined_monthly_restricted.png", dpi=150)
+fig.savefig("plot_S_fr_combined_monthly_restricted.png", dpi=300, bbox_inches="tight")
 plt.close(fig)
 print("  Saved: plot_S_fr_combined_monthly_restricted.png")
 
@@ -1120,7 +1120,7 @@ ax.tick_params(axis="both", labelsize=12)
 ax.legend(fontsize=13)
 ax.grid(True, alpha=0.3)
 fig.tight_layout()
-fig.savefig("plot_S_p_combined_monthly_restricted.png", dpi=150)
+fig.savefig("plot_S_p_combined_monthly_restricted.png", dpi=300, bbox_inches="tight")
 plt.close(fig)
 print("  Saved: plot_S_p_combined_monthly_restricted.png")
 
@@ -1169,8 +1169,9 @@ ax1.plot(_plot_df["date"], _plot_df["avg_pred"],
 ax1.plot(_plot_df["date"], _plot_df["avg_pred_roll"],
          color=color_pred, linewidth=2.0, linestyle="-", label="Avg. predictor (12m avg)")
 ax1.axhline(0, color=color_pred, linewidth=0.6, linestyle="--", alpha=0.5)
-ax1.set_xlabel("Date")
-ax1.set_ylabel("Avg. predictor (z-score, pre-1994 normalised)", color=color_pred)
+ax1.set_xlabel("Date", fontsize=14)
+ax1.set_ylabel("Avg. predictor (z-score, pre-1994 normalised)", fontsize=14, color=color_pred)
+ax1.tick_params(axis="both", labelsize=12)
 ax1.tick_params(axis="y", labelcolor=color_pred)
 
 ax2 = ax1.twinx()
@@ -1179,7 +1180,7 @@ ax2.plot(_plot_df["date"], _plot_df["eqprem"],
 ax2.plot(_plot_df["date"], _plot_df["eqprem_roll"],
          color=color_eq, linewidth=2.0, alpha=0.9, linestyle="--", dashes=[6, 3], label="Equity premium (12m avg)")
 ax2.axhline(0, color=color_eq, linewidth=0.6, linestyle="--", alpha=0.5)
-ax2.set_ylabel("Equity premium", color=color_eq)
+ax2.set_ylabel("Equity premium", fontsize=14, color=color_eq)
 ax2.tick_params(axis="y", labelcolor=color_eq)
 
 _lines1, _labs1 = ax1.get_legend_handles_labels()
@@ -1189,9 +1190,9 @@ ax1.legend(_lines1 + _lines2, _labs1 + _labs2, fontsize=9, loc="lower left")
 ax1.xaxis.set_major_locator(mdates.YearLocator(1))
 ax1.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
 plt.xticks(rotation=45)
-ax1.grid(True, alpha=0.25)
+ax1.grid(True, alpha=0.3)
 fig.tight_layout()
-fig.savefig("plot_pred_vs_eqprem_1994_2000_monthly_restricted.png", dpi=150)
+fig.savefig("plot_pred_vs_eqprem_1994_2000_monthly_restricted.png", dpi=300, bbox_inches="tight")
 plt.close(fig)
 
 ##################################################
@@ -1757,7 +1758,7 @@ for _dl in DOLS_DELTAS:
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
     _fname = f"plot_DOLS_S_fr_delta{int(round(_dl*100000))}_monthly_restricted.png"
-    fig.savefig(_fname, dpi=150)
+    fig.savefig(_fname, dpi=300, bbox_inches="tight")
     plt.close(fig)
     print(f"    Saved: {_fname}")
 
@@ -1782,7 +1783,7 @@ for _dl in DOLS_DELTAS:
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
     _fname = f"plot_DOLS_S_p_delta{int(round(_dl*100000))}_monthly_restricted.png"
-    fig.savefig(_fname, dpi=150)
+    fig.savefig(_fname, dpi=300, bbox_inches="tight")
     plt.close(fig)
     print(f"    Saved: {_fname}")
 
@@ -1800,23 +1801,22 @@ print("\nPlotting return variance over time ...")
 _RV_COLORS = ["#0072B2", "#D55E00", "#009E73"]
 _RV_STYLES = ["-", "--", ":"]
 
-fig, ax = plt.subplots(figsize=(13, 6))
+fig, ax = plt.subplots(figsize=(11, 4))
 for idx, W in enumerate(WINDOWS):
     _rv = pd.Series(actual_vec).rolling(W).var().values
     _mask = ~np.isnan(_rv)
     ax.plot(np.array(dates_oos)[_mask], _rv[_mask],
             color=_RV_COLORS[idx], linestyle=_RV_STYLES[idx],
-            linewidth=1.2, label=f"W = {W} months")
+            linewidth=1.3, label=f"W={W} months")
 
-ax.set_xlabel("Date", fontsize=13)
-ax.set_ylabel("Variance", fontsize=13)
-ax.set_title("Rolling Return Variance", fontsize=13)
-ax.tick_params(axis="both", labelsize=11)
+ax.set_xlabel("Date", fontsize=14)
+ax.set_ylabel("Variance", fontsize=14)
+ax.tick_params(axis="both", labelsize=12)
 ax.xaxis.set_major_locator(mdates.YearLocator(5))
 ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
 ax.set_xlim(left=pd.Timestamp("1979-01-01"), right=pd.Timestamp("2025-01-01"))
 plt.xticks(rotation=45)
-ax.legend(fontsize=11)
+ax.legend(fontsize=13)
 ax.grid(True, alpha=0.3)
 fig.tight_layout()
 _fname_png = "plot_return_variance_monthly_restricted.png"
@@ -1880,16 +1880,14 @@ for W in WINDOWS:
     ax.axvline(pd.Timestamp("1994-01-01"), color="gray", linewidth=0.9,
                linestyle="--", alpha=0.7, label="1994 break")
 
-    ax.set_xlabel("Date", fontsize=13)
-    ax.set_ylabel("Correlation", fontsize=13)
-    ax.set_title(f"Individual Predictor Return Correlations (W = {W} months)",
-                 fontsize=13)
-    ax.tick_params(axis="both", labelsize=11)
+    ax.set_xlabel("Date", fontsize=14)
+    ax.set_ylabel("Correlation", fontsize=14)
+    ax.tick_params(axis="both", labelsize=12)
     ax.xaxis.set_major_locator(mdates.YearLocator(5))
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
     ax.set_xlim(left=pd.Timestamp("1979-01-01"), right=pd.Timestamp("2025-01-01"))
     plt.xticks(rotation=45)
-    ax.grid(True, alpha=0.2)
+    ax.grid(True, alpha=0.3)
 
     ax.legend(fontsize=9, ncol=3, loc="upper center",
               bbox_to_anchor=(0.5, -0.18), frameon=True, fancybox=False)
