@@ -442,27 +442,28 @@ print(f"Correlation-weighted forecasts saved in: {out_path2}")
 ##################################################
 # Huang, Jiang, Li, Tong & Zhou (2022, Management Science).
 #
-# At each OOS month t, using only data strictly before t:
+# At each OOS date t, using only data strictly before t:
 #
-#   Step 1 — Scale each predictor x_i by its correlation with r:
-#             x̃_i = corr(r, x_i) * x_i
+#   Step 1 — Standardise each predictor to zero mean and unit variance
+#            using in-sample (expanding-window) parameters only.
 #
-#   Step 2 — Apply PCA to the scaled predictor matrix X̃.
-#             Retain the first K principal components (factors).
+#   Step 2 — Run N bivariate regressions of r on each standardised
+#            predictor to obtain slopes β̂_i. Scale: X̃ = X_std · B̂.
 #
-#   Step 3 — Regress r on the K factors (OLS, expanding window).
-#             Forecast r_{t+1} using the factor values at month t.
+#   Step 3 — Extract top K PCs directly from the scaled matrix X̃
+#            (no second standardisation).
 #
-#   Non-negative restriction: if forecast < 0 → set to 0.
+#   Step 4 — Regress r on the K factors (OLS, expanding window).
+#            Forecast r_{t+1} using the factor values at time t.
 #
-# Run for K = 1, 2, 3, 4.  Also extract the full-sample idiosyncratic
-# covariance matrix (residual covariance after removing K factors)
-# and visualise it as a heatmap in the terminal.
+# Run for K = 1, 2, 3, 4 (fixed) plus two adaptive-K selection rules:
+#   - AIC-IS:  in-sample AIC on the predictive regression
+#   - ER:      Ahn-Horenstein (2013) eigenvalue ratio
 
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 
-print("\nComputing sPCA expanding-window forecasts (K = 1–4) ...")
+print("\nComputing sPCA expanding-window forecasts (K = 1–4, AIC-IS, ER) ...")
 
 # Build a lagged predictor matrix aligned with eqprem
 lag_data = df[["date", "eqprem"] + forecast_cols].copy()
@@ -480,13 +481,17 @@ _dates  = {K: [] for K in ALL_K}
 _actual = {K: [] for K in ALL_K}
 _pred   = {K: [] for K in ALL_K}
 
-# Best-AIC accumulators (select K with lowest accumulated OOS AIC at each t)
-_bestaic_dates  = []
-_bestaic_actual = []
-_bestaic_pred   = []
-_aic_weight_log = []   # store selected K per OOS period for diagnostics
-_oos_ss = {K: 0.0 for K in ALL_K}   # accumulated OOS sum of squared errors
-_oos_n  = 0                          # number of OOS obs so far
+# Adaptive-K accumulators: AIC-IS
+_aicis_dates  = []
+_aicis_actual = []
+_aicis_pred   = []
+_aicis_K_log  = []   # store selected K per OOS period
+
+# Adaptive-K accumulators: ER (eigenvalue ratio)
+_er_dates  = []
+_er_actual = []
+_er_pred   = []
+_er_K_log  = []   # store selected K per OOS period
 
 print(f"  Fitting PCA({MAX_K}) once per OOS month; nested factor sets 1..K ...")
 
@@ -502,44 +507,68 @@ for oos_row in oos_index:
 
     X_tr = train[forecast_cols].values
     r_tr = train["eqprem"].values
+    n_is = len(r_tr)
 
-    # Step 1: scale by in-sample OLS slopes β̂_i
+    # Step 1: standardise raw predictors (expanding-window, in-sample only)
+    pre_scaler = StandardScaler()
+    X_tr_std   = pre_scaler.fit_transform(X_tr)
+
+    # Step 2: scale by in-sample OLS slopes β̂_i
     slopes = np.array([
-        float(sm.OLS(r_tr, sm.add_constant(X_tr[:, i], has_constant="add")).fit().params[1])
-        if X_tr[:, i].std() > 0 else 0.0
-        for i in range(X_tr.shape[1])
+        float(sm.OLS(r_tr, sm.add_constant(X_tr_std[:, i], has_constant="add")).fit().params[1])
+        if X_tr_std[:, i].std() > 0 else 0.0
+        for i in range(X_tr_std.shape[1])
     ])
-    X_tr_scaled = X_tr * slopes
+    X_tr_scaled = X_tr_std * slopes
 
-    # Step 2: standardise → PCA with MAX_K components (fit once)
-    scaler   = StandardScaler()
-    X_tr_std = scaler.fit_transform(X_tr_scaled)
-    zero_std = scaler.scale_ == 0
-    if np.any(zero_std):
-        X_tr_std[:, zero_std] = 0.0
-
+    # Step 3: PCA directly on the scaled matrix (NO second standardisation)
     pca      = PCA(n_components=MAX_K)
-    F_tr     = pca.fit_transform(X_tr_std)       # (T, MAX_K)
+    F_tr     = pca.fit_transform(X_tr_scaled)    # (T, MAX_K)
+
+    # Eigenvalues for ER rule (reuse from PCA, need at least MAX_K+1)
+    # pca.explained_variance_ has MAX_K eigenvalues; get one more from residual
+    # For ER we need λ_1..λ_{K_max+1}. Compute full eigenvalues from covariance.
+    cov_scaled = np.cov(X_tr_scaled, rowvar=False)
+    all_eigenvalues = np.sort(np.linalg.eigvalsh(cov_scaled))[::-1]  # descending
+
+    # ER selection: K**_t = argmax_{k in 1..4} (λ_k / λ_{k+1})
+    er_ratios = {}
+    for k in ALL_K:
+        if k < len(all_eigenvalues) and (k + 1) <= len(all_eigenvalues):
+            lam_k   = all_eigenvalues[k - 1]
+            lam_kp1 = all_eigenvalues[k]
+            if lam_kp1 < 1e-10:
+                print(f"  ER warning at {oos_date.strftime('%Y-%m')}: λ_{k+1} < 1e-10, treating ER_{k} as +inf")
+                er_ratios[k] = np.inf
+            else:
+                er_ratios[k] = lam_k / lam_kp1
+        else:
+            er_ratios[k] = 0.0
+    best_K_er = max(er_ratios, key=er_ratios.get)
 
     # OOS predictor point
     test_row = lag_data[lag_data["date"] == oos_date]
     if test_row.empty:
         continue
-    X_oos     = test_row[forecast_cols].values
-    X_oos_std = scaler.transform(X_oos * slopes)
-    if np.any(zero_std):
-        X_oos_std[:, zero_std] = 0.0
-    F_oos     = pca.transform(X_oos_std)         # (1, MAX_K)
+    X_oos      = test_row[forecast_cols].values
+    X_oos_std  = pre_scaler.transform(X_oos)
+    X_oos_scaled = X_oos_std * slopes
+    F_oos      = pca.transform(X_oos_scaled)     # (1, MAX_K)
 
     actual_val = float(test_row["eqprem"].values[0])
 
-    _aic_at_t = {}
+    # In-sample AIC for each K (for AIC-IS selection)
+    _is_aic = {}
     for K in ALL_K:
         # ── sPCA: OLS r ~ F1..FK  (nested cumulative factors) ────────────────
         F_tr_k    = F_tr[:, :K]                                   # (T, K)
         X_reg     = sm.add_constant(F_tr_k, has_constant="add")
         ols_k     = sm.OLS(r_tr, X_reg).fit()
-        _aic_at_t[K] = ols_k.aic
+
+        # In-sample RSS for AIC-IS
+        rss_is    = np.sum(ols_k.resid ** 2)
+        _is_aic[K] = n_is * np.log(rss_is / n_is) + 2 * (K + 1)
+
         x_oos_reg = np.concatenate([[1.0], F_oos[0, :K]])
         y_hat     = float(ols_k.predict(x_oos_reg)[0])
 
@@ -547,26 +576,22 @@ for oos_row in oos_index:
         _actual[K].append(actual_val)
         _pred[K].append(y_hat)
 
-    # ── Best-AIC: pick K with lowest accumulated OOS AIC ─────────────
-    # Update accumulated OOS squared errors for each K
-    for K in ALL_K:
-        _oos_ss[K] += (actual_val - _pred[K][-1]) ** 2
-    _oos_n += 1
+    # ── AIC-IS: pick K with lowest in-sample AIC ─────────────────────
+    best_K_aicis = min(_is_aic, key=_is_aic.get)
+    y_hat_aicis  = _pred[best_K_aicis][-1]
 
-    # Compute accumulated OOS AIC: n*ln(RSS/n) + 2*(K+1)
-    if _oos_n >= max(ALL_K) + 2:
-        _oos_aic = {K: _oos_n * np.log(_oos_ss[K] / _oos_n) + 2 * (K + 1)
-                    for K in ALL_K}
-        best_K = min(_oos_aic, key=_oos_aic.get)
-    else:
-        best_K = 1  # default until enough OOS obs
+    _aicis_dates.append(oos_date)
+    _aicis_actual.append(actual_val)
+    _aicis_pred.append(y_hat_aicis)
+    _aicis_K_log.append(best_K_aicis)
 
-    y_hat_best = _pred[best_K][-1]
+    # ── ER: pick K from eigenvalue ratio ─────────────────────────────
+    y_hat_er = _pred[best_K_er][-1]
 
-    _bestaic_dates.append(oos_date)
-    _bestaic_actual.append(actual_val)
-    _bestaic_pred.append(y_hat_best)
-    _aic_weight_log.append(best_K)
+    _er_dates.append(oos_date)
+    _er_actual.append(actual_val)
+    _er_pred.append(y_hat_er)
+    _er_K_log.append(best_K_er)
 
 for K in ALL_K:
     spca_results[K] = pd.DataFrame({
@@ -577,29 +602,51 @@ for K in ALL_K:
     print(f"  K={K}: {len(_dates[K])} sPCA forecasts"
           f"  ({_dates[K][0].strftime('%Y-%m')} – {_dates[K][-1].strftime('%Y-%m')})")
 
-spca_bestaic_df = pd.DataFrame({
-    "date":                    _bestaic_dates,
-    "actual":                  _bestaic_actual,
-    "predicted_spca_bestAIC":  _bestaic_pred,
+spca_aicis_df = pd.DataFrame({
+    "date":                      _aicis_dates,
+    "actual":                    _aicis_actual,
+    "predicted_spca_AIC_IS":     _aicis_pred,
 })
-print(f"  Best-AIC: {len(_bestaic_dates)} forecasts")
+print(f"  AIC-IS: {len(_aicis_dates)} forecasts")
 
-# ── AIC selection diagnostics ─────────────────────────────────────────────────
-if _aic_weight_log:
-    _sel_count = {K: sum(1 for k in _aic_weight_log if k == K) for K in ALL_K}
-    print("\n  Best-AIC K selection diagnostics (across all OOS periods):")
-    print(f"  {'K':>3s}  {'# times selected':>16s}  {'% selected':>11s}")
-    _n_total = len(_aic_weight_log)
-    for K in ALL_K:
-        print(f"  {K:3d}  {_sel_count[K]:16d}  {100*_sel_count[K]/_n_total:10.1f}%")
+spca_er_df = pd.DataFrame({
+    "date":                  _er_dates,
+    "actual":                _er_actual,
+    "predicted_spca_ER":     _er_pred,
+})
+print(f"  ER: {len(_er_dates)} forecasts")
+
+# ── Adaptive-K selection diagnostics ──────────────────────────────────────────
+_PRE94  = pd.Timestamp("1993-12-01")
+_POST94 = pd.Timestamp("1994-01-01")
+
+for _label, _log, _date_list in [("AIC-IS", _aicis_K_log, _aicis_dates),
+                                  ("ER",     _er_K_log,    _er_dates)]:
+    if not _log:
+        continue
+    _arr = np.array(_log)
+    _darr = np.array(_date_list)
+    print(f"\n  {_label} K selection diagnostics:")
+    print(f"  {'Period':<20s}  {'K':>3s}  {'# selected':>11s}  {'% selected':>11s}  {'mean K':>7s}  {'std K':>7s}")
+    for _plabel, _pmask in [("Full sample",  np.ones(len(_arr), dtype=bool)),
+                             ("Pre-1994",     _darr <= _PRE94),
+                             ("Post-1994",    _darr >= _POST94)]:
+        _sub = _arr[_pmask]
+        if len(_sub) == 0:
+            continue
+        for K in ALL_K:
+            _cnt = int(np.sum(_sub == K))
+            _pct = 100 * _cnt / len(_sub)
+            print(f"  {_plabel:<20s}  {K:3d}  {_cnt:11d}  {_pct:10.1f}%  {_sub.mean():7.2f}  {_sub.std():7.2f}")
 
 # ── Attach sPCA forecasts to combined frame ───────────────────────────────────
 for K in ALL_K:
     col_spca = f"predicted_spca_K{K}"
     combined = pd.merge(combined, spca_results[K][["date", col_spca]], on="date", how="left")
 
-# Attach best-AIC forecasts
-combined = pd.merge(combined, spca_bestaic_df[["date", "predicted_spca_bestAIC"]], on="date", how="left")
+# Attach adaptive-K forecasts
+combined = pd.merge(combined, spca_aicis_df[["date", "predicted_spca_AIC_IS"]], on="date", how="left")
+combined = pd.merge(combined, spca_er_df[["date", "predicted_spca_ER"]], on="date", how="left")
 
 # ── Prevailing mean benchmark DataFrame ────────────────────────────────────────
 hm_df = pd.DataFrame({
@@ -706,22 +753,25 @@ for period_label, (p_start, p_end) in PERIODS.items():
             "CW p-value":  round(pval, 4),
         })
 
-    # sPCA best-AIC
-    _ba_col, _ba_label = "predicted_spca_bestAIC", "sPCA best-AIC"
-    if _ba_col in sub.columns:
+    # sPCA adaptive-K (AIC-IS and ER)
+    for _ba_col, _ba_label in [("predicted_spca_AIC_IS", "sPCA (AIC-IS)"),
+                                ("predicted_spca_ER",     "sPCA (ER)")]:
+        if _ba_col not in sub.columns:
+            continue
         valid_ba = sub[["eqprem", _ba_col, "predicted_HM"]].dropna()
-        if len(valid_ba) >= 10:
-            a, p, bm = valid_ba["eqprem"].values, valid_ba[_ba_col].values, valid_ba["predicted_HM"].values
-            r2      = r2_os(a, p, bm)
-            t, pval = clark_west(a, p, bm)
-            r2_rows.append({
-                "Period":      period_label,
-                "Predictor":   _ba_label,
-                "n":           len(valid_ba),
-                "R2_OS (%)":   round(r2 * 100, 2),
-                "CW t-stat":   round(t,    3),
-                "CW p-value":  round(pval, 4),
-            })
+        if len(valid_ba) < 10:
+            continue
+        a, p, bm = valid_ba["eqprem"].values, valid_ba[_ba_col].values, valid_ba["predicted_HM"].values
+        r2      = r2_os(a, p, bm)
+        t, pval = clark_west(a, p, bm)
+        r2_rows.append({
+            "Period":      period_label,
+            "Predictor":   _ba_label,
+            "n":           len(valid_ba),
+            "R2_OS (%)":   round(r2 * 100, 2),
+            "CW t-stat":   round(t,    3),
+            "CW p-value":  round(pval, 4),
+        })
 
 r2_df = pd.DataFrame(r2_rows)
 
@@ -839,7 +889,8 @@ all_forecast_model_cols = (
     [f"predicted_{p}" for p in PREDICTORS]
     + ["predicted_1N"]
     + [f"predicted_spca_K{K}" for K in ALL_K]
-    + ["predicted_spca_bestAIC"]
+    + ["predicted_spca_AIC_IS"]
+    + ["predicted_spca_ER"]
     + [f"predicted_CW_W{W}" for W in _VAR_PLOT_W]
     + ["predicted_HM"]
 )
