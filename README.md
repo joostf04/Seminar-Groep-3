@@ -1,2 +1,51 @@
-# Seminar-Groep-3
-Seminar in Investing 2025/2026 groep 3
+# Equity Premium Predictability — OLS Expanding Window
+
+Out-of-sample equity premium forecasting using OLS expanding-window regressions across monthly and quarterly data, with and without Campbell & Thompson (2008) sign restrictions.
+
+---
+
+## Structure
+
+```
+├── Data_Seminar.xlsx                              ← data
+├── ols_expanding_window_monthly_unrestricted.py
+├── ols_expanding_window_monthly_restricted.py
+├── ols_expanding_window_quarterly_unrestricted.py
+├── ols_expanding_window_quarterly_restricted.py
+└── README.md
+```
+
+---
+
+## Files
+
+| File | Description |
+|---|---|
+| `ols_expanding_window_quarterly_unrestricted.py` | Quarterly forecasts, no restrictions |
+| `ols_expanding_window_quarterly_restricted.py` | Quarterly forecasts, CT sign restrictions |
+| `ols_expanding_window_monthly_unrestricted.py` | Monthly forecasts, no restrictions |
+| `ols_expanding_window_monthly_restricted.py` | Monthly forecasts, CT sign restrictions |
+
+Each script runs the full pipeline: bivariate OLS forecasts, 1/N combination, sPCA, OOS R², CER gain, DMSFE, DOLS, QLR structural break test, and diagnostic plots. Results are saved to an Excel workbook and PNG/PDF plots in the same folder.
+
+---
+
+## Requirements
+
+```
+pip install pandas numpy statsmodels scipy scikit-learn matplotlib openpyxl
+```
+
+---
+
+## How to Run
+
+Place `Data_Seminar.xlsx` in the project folder, then run any script:
+
+```
+python "ols_expanding_window_monthly_unrestricted.py"
+python "ols_expanding_window_monthly_restricted.py"
+python "ols_expanding_window_quarterly_unrestricted.py"
+python "ols_expanding_window_quarterly_restricted.py"
+```
+
