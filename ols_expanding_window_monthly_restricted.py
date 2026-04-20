@@ -7,8 +7,8 @@ from scipy.stats import spearmanr, rankdata
 
 warnings.filterwarnings("ignore", "invalid value", RuntimeWarning)
 
-# ── Load data ──────────────────────────────────────────────────────────────────
-df = pd.read_excel("Data_Seminar.xlsx", sheet_name="Monthly")
+# Load data
+df = pd.read_excel(r"C:\Users\ruben\Downloads\Data_Seminar.xlsx", sheet_name="Monthly")
 df = df.drop(columns=["i/k (NOT HERE)"], errors="ignore")
 df["date"] = pd.to_datetime(df["yyyymm"].astype(str), format="%Y%m")
 # Rename: use "log eqprem" for all predictions/metrics; keep "simple eqprem" for CER only
@@ -21,11 +21,11 @@ _VAR_PLOT_W = [60, 120, 180]
 df = df.sort_values("date").reset_index(drop=True)
 print(f"Monthly | Annualisation: x{ANN} | Rolling windows: {WINDOWS}")
 
-# ── Define predictors ──────────────────────────────────────────────────────────
+# Define predictors 
 PREDICTORS = [c for c in df.columns if c not in ("yyyymm", "date", "eqprem", "simple_eqprem", "RETURNS INCL DIV", "RF")]
 print(f"Predictors ({len(PREDICTORS)}): {PREDICTORS}\n")
 
-# ── Expected signs for restrictions ────────────────────────────────────────────
+# Expected signs for restrictions 
 EXPECTED_SIGNS = {
     "DP": 1, "DY": 1, "EP": 1, "DE": 1, "SVAR": 1, "BM": 1, "LTR": 1, "TMS": 1, "DFY": 1, "DFR": 1,
     "NTIS": -1, "TBL": -1, "LTY": -1, "INFL": -1, "IK": -1
@@ -54,12 +54,11 @@ if unmatched:
     print(f"*** Fixed EXPECTED_SIGNS to match column names: {EXPECTED_SIGNS} ***")
 print("=" * 50 + "\n")
 
-# ── Split boundary ─────────────────────────────────────────────────────────────
+# Split boundary 
 IN_SAMPLE_END   = pd.Timestamp("1978-12-01")   # last in-sample month
 OOS_START_PRED  = pd.Timestamp("1979-01-01")   # first month we *predict*
 OOS_END_PRED    = pd.Timestamp("2022-12-01")   # last month we *predict*
 FORECAST_START  = pd.Timestamp("1965-01-01")   # extended start for S^fr windows
-ST_START        = pd.Timestamp("1979-01-01")   # first date reported for S_t
 # The first prediction uses data up to 1978-12 (the full in-sample window).
 # The row we predict is the row whose date == OOS_START_PRED.
 
@@ -77,23 +76,22 @@ print(f"OOS evaluation period: {n_oos}  "
       f"({df.loc[oos_index_eval[0], 'date'].strftime('%Y-%m')} - "
       f"{df.loc[oos_index_eval[-1], 'date'].strftime('%Y-%m')})\n")
 
-# ── Storage ────────────────────────────────────────────────────────────────────
+# Storage 
 results = {}   # predictor -> DataFrame with columns: date, actual, predicted
 
 total_start = time.time()
 
 ####################################################
-# Predictions monthly                               #
+# Predictions monthly                               
 ####################################################
 
-# ── Main loop ──────────────────────────────────────────────────────────────────
+# Main loop
 for pred in PREDICTORS:
     pred_start = time.time()
     print(f"[{pred}] Starting OLS expanding window ...", flush=True)
 
-    # Drop rows where predictor or target is NaN, then lag predictor by one month.
-    # Since pred_t and eqprem_t are dated the same month, pred_{t-1} must be used
-    # to predict eqprem_t (the predictor is not yet known at the start of month t).
+    # Drop rows where predictor or target is NaN, then lag predictor by one month
+    # pred_t and eqprem_t are dated the same month, pred_{t-1} must be used to predict eqprem_t
     data = df[["date", "eqprem", pred]].dropna().copy()
     lag_col = f"{pred}_lag"
     data[lag_col] = data[pred].shift(1)          # pred_{t-1} aligned with eqprem_t
@@ -112,14 +110,14 @@ for pred in PREDICTORS:
         if len(train) < 5:          # guard: not enough data
             continue
 
-        # Train: eqprem_t ~ pred_{t-1}  (no look-ahead)
+        # Train: eqprem_t ~ pred_{t-1} 
         X_train = sm.add_constant(train[lag_col].values, has_constant="add")
         y_train = train["eqprem"].values
 
         # Fit OLS
         model = sm.OLS(y_train, X_train).fit()
 
-        # Predict using pred_{t-1}, i.e. the lagged predictor for oos_date
+        # Predict using pred_{t-1}, the lagged predictor for oos_date
         row_data = data[data["date"] == oos_date]
         if row_data.empty:
             continue
@@ -160,7 +158,7 @@ print(f"\nAll predictors done in {total_elapsed:.1f}s total.")
 # 1/N combination forecast
 ##################################################
 
-# Align all individual forecasts on date, then average with equal (1/N) weights.
+# Align all individual forecasts on date, then average with equal (1/N) weights
 print("\nComputing 1/N combination forecast ...")
 
 pred_frames = []
@@ -178,20 +176,16 @@ combined = combined.sort_values("date").reset_index(drop=True)
 forecast_cols = list(results.keys())
 combined["predicted_1N"] = combined[forecast_cols].mean(axis=1)
 
-# Add 20 bps cost deduction for economic evaluation
-cost = 0.002  # 20 basis points
-combined["predicted_1N_cost"] = combined["predicted_1N"] - cost
-
 # Attach actual eqprem
 actuals_df = df[["date", "eqprem"]].copy()
 combined   = pd.merge(combined, actuals_df, on="date", how="left")
 
-# Metrics for 1/N — evaluation period only (1979+)
+# Metrics for 1/N, evaluation period only (1979+)
 eval_mask_1n = combined["date"] >= OOS_START_PRED
 errs_1n  = combined.loc[eval_mask_1n, "eqprem"] - combined.loc[eval_mask_1n, "predicted_1N"]
 msfe_1n  = (errs_1n ** 2).mean()
 
-# Benchmark MSFE (prevailing mean) — evaluation period only (1979+)
+# Benchmark MSFE (prevailing mean), evaluation period only (1979+)
 hist_means_1n, hist_actuals_1n = [], []
 for oos_row in oos_index_eval:
     oos_date   = df.loc[oos_row, "date"]
@@ -203,16 +197,10 @@ for oos_row in oos_index_eval:
 bm_msfe_1n = np.mean((np.array(hist_actuals_1n) - np.array(hist_means_1n)) ** 2)
 oos_r2_1n  = 1 - msfe_1n / bm_msfe_1n
 
-# Metrics with cost — evaluation period only (1979+)
-errs_1n_cost  = combined.loc[eval_mask_1n, "eqprem"] - combined.loc[eval_mask_1n, "predicted_1N_cost"]
-msfe_1n_cost  = (errs_1n_cost ** 2).mean()
-oos_r2_1n_cost  = 1 - msfe_1n_cost / bm_msfe_1n
-
 print(f"  1/N MSFE: {msfe_1n:.6f} | OOS R²: {oos_r2_1n:.4f}")
-print(f"  With 20bps cost: MSFE: {msfe_1n_cost:.6f} | OOS R²: {oos_r2_1n_cost:.4f}")
 
-# Prevailing mean (expanding window) — used later in Decomposition as E_r
-# Built aligned to combined["date"] to guarantee date-by-date correspondence.
+# Prevailing mean (expanding window), used later in Decomposition as E_r
+# Built aligned to combined["date"] to guarantee date-by-date correspondence
 hist_means_1n_map = {}
 for oos_row in oos_index:
     oos_date   = df.loc[oos_row, "date"]
@@ -224,35 +212,33 @@ for oos_row in oos_index:
 n_preds_used = combined[forecast_cols].notna().sum(axis=1).mean()
 print(f"  OOS obs: {len(combined)} | Avg predictors per month: {n_preds_used:.1f}")
 
-# ── Save results ───────────────────────────────────────────────────────────────
+# Save results
 out_path2 = "ols_oos_predictions_monthly_restricted.xlsx"
 with pd.ExcelWriter(out_path2, engine="openpyxl") as writer:
-    # --- Summary sheet: one row per predictor + 1/N row ---
+    # Summary sheet: one row per predictor + 1/N row
     summary_rows = []
     for pred, oos_df in results.items():
         summary_rows.append({"predictor": pred, "n_oos": len(oos_df)})
     summary_rows.append({"predictor": "1/N combination", "n_oos": len(combined)})
-    summary_rows.append({"predictor": "1/N combination with 20bps cost", "n_oos": len(combined)})
     pd.DataFrame(summary_rows).to_excel(writer, sheet_name="Summary", index=False)
 
-    # --- Predictions sheet: restricted ---
+    # Predictions sheet: restricted
     preds_sheet = combined[["date", "eqprem"]].rename(columns={"eqprem": "actual"}).copy()
     for pred in forecast_cols:
         preds_sheet[f"pred_{pred}"] = combined[pred]
     preds_sheet["predicted_1N"] = combined["predicted_1N"]
-    preds_sheet["predicted_1N_cost"] = combined["predicted_1N_cost"]
     preds_sheet.to_excel(writer, sheet_name="Predictions", index=False)
 
 print(f"Results saved to: {out_path2}")
 
-# ── Prevailing mean benchmark DataFrame ────────────────────────────────────────
+# Prevailing mean benchmark DataFrame 
 hm_df = pd.DataFrame({
     "date": list(hist_means_1n_map.keys()),
     "predicted_HM": list(hist_means_1n_map.values())
 }).sort_values("date").reset_index(drop=True)
 
 ##################################################
-# Decomposition                                  #
+# Decomposition                                  
 ##################################################
 
 print("\nComputing expanding-window decomposition ...")
@@ -281,7 +267,7 @@ for t in range(1, T + 1):
     Er = E_r[:t]             # (t,)
     date = dates_oos[t - 1]
 
-    e = r[:, None] - P       # (t, N) forecast errors, NOT demeaned
+    e = r[:, None] - P       # (t, N) forecast errors
 
     Sigma_e     = (e.T @ e) / t
     irreducible = np.mean(r ** 2) * (iota @ iota.T)
@@ -306,20 +292,18 @@ with pd.ExcelWriter(out_path2, engine="openpyxl", mode="a",
 print(f"Decomposition saved to: {out_path2}  ({T} time points, {N}x{N} matrices)")
 
 ##################################################
-# S^fr and |S_t| — rolling windows             #
+# S^fr: rolling windows             
 ##################################################
 
 # Rolling-window correlations (W = 10, 20, 40, 60 quarters):
 #   rho_i^t(W)  = corr(r_{t-W+1:t}, r_hat_i_{t-W+1:t})   — N-vector
 #   S^fr_t(W)   = (1/N) * sum_i   rho_i^t(W)              — signed average
-#   |S_t|(W)    = (1/N) * sum_i | rho_i^t(W) |            — absolute average
 
 # WINDOWS = [10, 20, 40, 60] quarters ≈ 2.5, 5, 10, 15 years
 
-print("\nComputing rolling-window S^fr and |S_t| ...")
+print("\nComputing rolling-window S^fr ...")
 
 sfr_results  = {}   # W -> DataFrame(date, S_fr)
-sabs_results = {}   # W -> DataFrame(date, S_abs)
 sp_results   = {}   # W -> DataFrame(date, S_p)
 rho_rows = {W: [] for W in WINDOWS}  # W -> list of {date, pred: rho}
 # Named aliases for the three largest windows (used in rho plot)
@@ -330,7 +314,6 @@ rho_rows_60m = rho_rows[WINDOWS[-3]]   # 60 months =  5 years
 for W in WINDOWS:
     print(f"  Window = {W} months ...")
     rows_sfr  = []
-    rows_sabs = []
     rows_sp   = []
 
     for t in range(2, T + 1):          # need >= 2 obs for correlation
@@ -351,8 +334,6 @@ for W in WINDOWS:
 
         # S^fr: signed average correlation
         sfr = np.nanmean(rhos)
-        # |S_t|: absolute average correlation
-        sabs = np.nanmean(np.abs(rhos))
 
         # S^p: average pairwise Spearman correlation among forecasts (eq. 6)
         P_ranked = np.apply_along_axis(rankdata, 0, P_window)  # rank each column
@@ -361,7 +342,6 @@ for W in WINDOWS:
         sp = np.nanmean(corr_mat[upper_idx])
 
         rows_sfr.append({"date": date, "S_fr": sfr})
-        rows_sabs.append({"date": date, "S_abs": sabs})
         rows_sp.append({"date": date, "S_p": sp})
 
         # Store individual rhos for rho plot (only for largest 3 windows)
@@ -372,20 +352,18 @@ for W in WINDOWS:
             rho_rows[W].append(rho_dict)
 
     sfr_results[W]  = pd.DataFrame(rows_sfr)
-    sabs_results[W] = pd.DataFrame(rows_sabs)
     sp_results[W]   = pd.DataFrame(rows_sp)
 
-# ── Save S^fr and |S_t| ─────────────────────────────────────────────────────────
+# Save S^fr
 with pd.ExcelWriter(out_path2, engine="openpyxl", mode="a",
                     if_sheet_exists="replace") as writer:
     for W in WINDOWS:
         sfr_results[W].to_excel(writer, sheet_name=f"S_fr_W{W}", index=False)
-        sabs_results[W].to_excel(writer, sheet_name=f"S_abs_W{W}", index=False)
         sp_results[W].to_excel(writer, sheet_name=f"S_p_W{W}", index=False)
 
-print(f"S^fr and |S_t| saved to: {out_path2}")
+print(f"S^fr saved to: {out_path2}")
 
-# ── Rolling correlations (rho plot) ────────────────────────────────────────────
+# Rolling correlations (rho plot) 
 print("\nSaving rolling correlations for rho plot ...")
 
 with pd.ExcelWriter(out_path2, engine="openpyxl", mode="a",
@@ -397,90 +375,26 @@ with pd.ExcelWriter(out_path2, engine="openpyxl", mode="a",
 print(f"Rolling correlations saved to: {out_path2}")
 
 ##################################################
-# Correlation-weighted forecasts                #
-##################################################
-
-print("\nComputing correlation-weighted forecasts ...")
-
-# Correlation-weighted (CW) forecasts: weight by rolling correlation with eqprem.
-#   w_i^t(W) = rho_i^t(W) / sum_j |rho_j^t(W)|
-#   r_hat_CW^t(W) = sum_i w_i^t(W) * r_hat_i^t
-# where rho_i^t(W) = corr(r_{t-W+1:t}, r_hat_i_{t-W+1:t})
-
-cw_results = {}   # W -> DataFrame(date, predicted_CW_W{W})
-
-for W in _VAR_PLOT_W:
-    print(f"  Window = {W} months ...")
-    cw_preds = []
-
-    for t in range(2, T + 1):
-        if t < W:
-            continue
-        r_window   = actual_vec[t - W:t]
-        P_window   = pred_matrix[t - W:t, :]
-        date       = dates_oos[t - 1]
-
-        # Rolling correlations (Spearman)
-        rhos = []
-        for i in range(N):
-            if np.std(P_window[:, i]) > 0:
-                rho, _ = spearmanr(r_window, P_window[:, i])
-            else:
-                rho = 0.0
-            rhos.append(rho)
-
-        # Weights: rho_i / sum |rho_j|
-        abs_rhos_sum = np.sum(np.abs(rhos))
-        if abs_rhos_sum > 0:
-            weights = np.array(rhos) / abs_rhos_sum
-        else:
-            weights = np.ones(N) / N
-
-        # CW forecast: weighted sum of individual forecasts
-        P_t = pred_matrix[t - 1, :]  # (N,) forecasts for this t
-        cw_pred = np.sum(weights * P_t)
-        cw_preds.append({"date": date, "predicted_CW_W{W}": cw_pred})
-
-    cw_results[W] = pd.DataFrame(cw_preds)
-
-# ── Save CW forecasts ──────────────────────────────────────────────────────────
-with pd.ExcelWriter(out_path2, engine="openpyxl", mode="a",
-                    if_sheet_exists="replace") as writer:
-    for W in _VAR_PLOT_W:
-        cw_results[W].to_excel(writer, sheet_name=f"CorrWeighted_W{W}", index=False)
-
-print(f"Correlation-weighted forecasts saved in: {out_path2}")
-
-##################################################
 # Scaled PCA (sPCA) forecast                    #
 ##################################################
-# Huang, Jiang, Li, Tong & Zhou (2022, Management Science).
+# At each OOS month t, using only data strictly before t:
 #
-# At each OOS date t, using only data strictly before t:
+#   Step 1 — Scale each predictor x_i by its correlation with r:
+#             x̃_i = corr(r, x_i) * x_i
 #
-#   Step 1 — Standardise each predictor to zero mean and unit variance
-#            using in-sample (expanding-window) parameters only.
+#   Step 2 — Apply PCA to the scaled predictor matrix X̃
+#             Retain the first K principal components (factors)
 #
-#   Step 2 — Run N bivariate regressions of r on each standardised
-#            predictor to obtain slopes β̂_i. Apply CT sign restrictions.
-#            Scale: X̃ = X_std · B̂.
+#   Step 3 — Regress r on the K factors (OLS, expanding window)
+#             Forecast r_{t+1} using the factor values at month t
 #
-#   Step 3 — Extract top K PCs directly from the scaled matrix X̃
-#            (no second standardisation).
-#
-#   Step 4 — Regress r on the K factors (OLS, expanding window).
-#            Forecast r_{t+1} using the factor values at time t.
-#
-# Run for K = 1, 2, 3, 4 (fixed) plus two adaptive-K selection rules:
-#   - AIC-IS:  in-sample AIC on the predictive regression
-#   - ER:      Ahn-Horenstein (2013) eigenvalue ratio
+#   Non-negative restriction: if forecast < 0 → set to 0
 
-from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 
 ALL_K = [1, 2, 3, 4]
 
-print("\nComputing sPCA expanding-window forecasts (K = 1–4, AIC-IS, ER) ...")
+print("\nComputing sPCA expanding-window forecasts (K = 1–4) ...")
 
 # Build a lagged predictor matrix aligned with eqprem
 lag_data = df[["date", "eqprem"] + forecast_cols].copy()
@@ -498,17 +412,14 @@ _dates  = {K: [] for K in ALL_K}
 _actual = {K: [] for K in ALL_K}
 _pred   = {K: [] for K in ALL_K}
 
-# Adaptive-K accumulators: AIC-IS
-_aicis_dates  = []
-_aicis_actual = []
-_aicis_pred   = []
-_aicis_K_log  = []
+# Best-AIC accumulators (select K with lowest accumulated OOS AIC at each t)
+_bestaic_dates  = []
+_bestaic_actual = []
+_bestaic_pred   = []
+_aic_weight_log = []   # store selected K per OOS period for diagnostics
+_oos_ss = {K: 0.0 for K in ALL_K}   # accumulated OOS sum of squared errors
+_oos_n  = 0                          # number of OOS obs so far
 
-# Adaptive-K accumulators: ER (eigenvalue ratio)
-_er_dates  = []
-_er_actual = []
-_er_pred   = []
-_er_K_log  = []
 
 print(f"  Fitting PCA({MAX_K}) once per OOS month; nested factor sets 1..K ...")
 
@@ -524,17 +435,12 @@ for oos_row in oos_index:
 
     X_tr = train[forecast_cols].values
     r_tr = train["eqprem"].values
-    n_is = len(r_tr)
 
-    # Step 1: standardise raw predictors (expanding-window, in-sample only)
-    pre_scaler = StandardScaler()
-    X_tr_std   = pre_scaler.fit_transform(X_tr)
-
-    # Step 2: scale by in-sample OLS slopes β̂_i and apply CT restrictions
+    # Step 1: scale by in-sample OLS slopes β̂_i and apply CT restrictions
     unrestricted_slopes = np.array([
-        float(sm.OLS(r_tr, sm.add_constant(X_tr_std[:, i], has_constant="add")).fit().params[1])
-        if X_tr_std[:, i].std() > 0 else 0.0
-        for i in range(X_tr_std.shape[1])
+        float(sm.OLS(r_tr, sm.add_constant(X_tr[:, i], has_constant="add")).fit().params[1])
+        if X_tr[:, i].std() > 0 else 0.0
+        for i in range(X_tr.shape[1])
     ])
     restricted_slopes = np.array([
         slope if not ((slope > 0 and EXPECTED_SIGNS.get(pred, 0) < 0)
@@ -546,50 +452,18 @@ for oos_row in oos_index:
     if n_restricted > 0:
         print(f"Period {oos_date.strftime('%Y-%m')}: {n_restricted}/{len(forecast_cols)} slopes restricted to zero")
 
-    X_tr_scaled = X_tr_std * restricted_slopes
+    X_tr_scaled = X_tr * restricted_slopes
 
-    # Step 3: PCA directly on the scaled matrix (NO second standardisation)
-    pca      = PCA(n_components=MAX_K)
-    F_tr     = pca.fit_transform(X_tr_scaled)    # (T, MAX_K)
-
-    # Eigenvalues for ER rule
-    cov_scaled = np.cov(X_tr_scaled, rowvar=False)
-    all_eigenvalues = np.sort(np.linalg.eigvalsh(cov_scaled))[::-1]
-
-    er_ratios = {}
-    for k in ALL_K:
-        if k < len(all_eigenvalues) and (k + 1) <= len(all_eigenvalues):
-            lam_k   = all_eigenvalues[k - 1]
-            lam_kp1 = all_eigenvalues[k]
-            if lam_kp1 < 1e-10:
-                print(f"  ER warning at {oos_date.strftime('%Y-%m')}: λ_{k+1} < 1e-10, treating ER_{k} as +inf")
-                er_ratios[k] = np.inf
-            else:
-                er_ratios[k] = lam_k / lam_kp1
-        else:
-            er_ratios[k] = 0.0
-    best_K_er = max(er_ratios, key=er_ratios.get)
+    # Step 2: PCA with MAX_K components (fit once)
+    pca   = PCA(n_components=MAX_K)
+    F_tr  = pca.fit_transform(X_tr_scaled)       # (T, MAX_K)
 
     # OOS predictor point
     test_row = lag_data[lag_data["date"] == oos_date]
     if test_row.empty:
         continue
-    X_oos        = test_row[forecast_cols].values
-    X_oos_std    = pre_scaler.transform(X_oos)
-    X_oos_scaled = X_oos_std * restricted_slopes
-    F_oos        = pca.transform(X_oos_scaled)   # (1, MAX_K)
-
-    # Debug: verify restriction actually changes factors when slopes differ
-    if n_restricted > 0:
-        X_tr_scaled_unrestricted = X_tr_std * unrestricted_slopes
-        pca_u = PCA(n_components=MAX_K)
-        F_tr_u = pca_u.fit_transform(X_tr_scaled_unrestricted)
-        assert not np.allclose(restricted_slopes, unrestricted_slopes), (
-            f"Period {oos_date.strftime('%Y-%m')}: restricted and unrestricted scaling weights are identical!"
-        )
-        assert not np.allclose(F_tr, F_tr_u), (
-            f"Period {oos_date.strftime('%Y-%m')}: restricted and unrestricted sPCA factors are identical!"
-        )
+    X_oos = test_row[forecast_cols].values
+    F_oos = pca.transform(X_oos * restricted_slopes)  # (1, MAX_K)
 
     actually_restricted = np.sum(restricted_slopes != unrestricted_slopes)
     if actually_restricted > 0:
@@ -599,17 +473,13 @@ for oos_row in oos_index:
 
     actual_val = float(test_row["eqprem"].values[0])
 
-    _is_aic = {}
+    _aic_at_t = {}
     for K in ALL_K:
         # ── sPCA: OLS r ~ F1..FK  (nested cumulative factors) ────────────────
         F_tr_k    = F_tr[:, :K]                                   # (T, K)
         X_reg     = sm.add_constant(F_tr_k, has_constant="add")
         ols_k     = sm.OLS(r_tr, X_reg).fit()
-
-        # In-sample RSS for AIC-IS
-        rss_is    = np.sum(ols_k.resid ** 2)
-        _is_aic[K] = n_is * np.log(rss_is / n_is) + 2 * (K + 1)
-
+        _aic_at_t[K] = ols_k.aic
         x_oos_reg = np.concatenate([[1.0], F_oos[0, :K]])
         y_hat     = float(ols_k.predict(x_oos_reg)[0])
         if y_hat < 0:
@@ -619,22 +489,25 @@ for oos_row in oos_index:
         _actual[K].append(actual_val)
         _pred[K].append(y_hat)
 
-    # ── AIC-IS: pick K with lowest in-sample AIC ─────────────────────
-    best_K_aicis = min(_is_aic, key=_is_aic.get)
-    y_hat_aicis  = _pred[best_K_aicis][-1]
+    # ── Best-AIC: pick K with lowest accumulated OOS AIC ─────────────
+    # Update accumulated OOS squared errors for each K
+    for K in ALL_K:
+        _oos_ss[K] += (actual_val - _pred[K][-1]) ** 2
+    _oos_n += 1
 
-    _aicis_dates.append(oos_date)
-    _aicis_actual.append(actual_val)
-    _aicis_pred.append(y_hat_aicis)
-    _aicis_K_log.append(best_K_aicis)
+    # Compute accumulated OOS AIC: n*ln(RSS/n) + 2*(K+1)
+    if _oos_n >= max(ALL_K) + 2:
+        _oos_aic = {K: _oos_n * np.log(_oos_ss[K] / _oos_n) + 2 * (K + 1)
+                    for K in ALL_K}
+        best_K = min(_oos_aic, key=_oos_aic.get)
+    else:
+        best_K = 1  # default until enough OOS obs
 
-    # ── ER: pick K from eigenvalue ratio ─────────────────────────────
-    y_hat_er = _pred[best_K_er][-1]
-
-    _er_dates.append(oos_date)
-    _er_actual.append(actual_val)
-    _er_pred.append(y_hat_er)
-    _er_K_log.append(best_K_er)
+    y_hat_best = _pred[best_K][-1]
+    _bestaic_dates.append(oos_date)
+    _bestaic_actual.append(actual_val)
+    _bestaic_pred.append(y_hat_best)
+    _aic_weight_log.append(best_K)
 
 
 for K in ALL_K:
@@ -646,52 +519,72 @@ for K in ALL_K:
     print(f"  K={K}: {len(_dates[K])} sPCA forecasts"
           f"  ({_dates[K][0].strftime('%Y-%m')} – {_dates[K][-1].strftime('%Y-%m')})")
 
-spca_aicis_df = pd.DataFrame({
-    "date":                      _aicis_dates,
-    "actual":                    _aicis_actual,
-    "predicted_spca_AIC_IS":     _aicis_pred,
+spca_bestaic_df = pd.DataFrame({
+    "date":                    _bestaic_dates,
+    "actual":                  _bestaic_actual,
+    "predicted_spca_bestAIC":  _bestaic_pred,
 })
-print(f"  AIC-IS: {len(_aicis_dates)} forecasts")
+print(f"  Best-AIC: {len(_bestaic_dates)} forecasts")
 
-spca_er_df = pd.DataFrame({
-    "date":                  _er_dates,
-    "actual":                _er_actual,
-    "predicted_spca_ER":     _er_pred,
-})
-print(f"  ER: {len(_er_dates)} forecasts")
 
-# ── Adaptive-K selection diagnostics ──────────────────────────────────────────
-_PRE94  = pd.Timestamp("1993-12-01")
-_POST94 = pd.Timestamp("1994-01-01")
+# ── AIC selection diagnostics ─────────────────────────────────────────────────
+if _aic_weight_log:
+    _sel_count = {K: sum(1 for k in _aic_weight_log if k == K) for K in ALL_K}
+    print("\n  Best-AIC K selection diagnostics (across all OOS periods):")
+    print(f"  {'K':>3s}  {'# times selected':>16s}  {'% selected':>11s}")
+    _n_total = len(_aic_weight_log)
+    for K in ALL_K:
+        print(f"  {K:3d}  {_sel_count[K]:16d}  {100*_sel_count[K]/_n_total:10.1f}%")
 
-for _label, _log, _date_list in [("AIC-IS", _aicis_K_log, _aicis_dates),
-                                  ("ER",     _er_K_log,    _er_dates)]:
-    if not _log:
+# ── AIC factor selection frequency by subperiod ───────────────────────────────
+_sel_dates = pd.DatetimeIndex(_bestaic_dates)
+
+_subperiods = {
+    "1979-2022": (pd.Timestamp("1979-01-01"), pd.Timestamp("2022-12-01")),
+    "1979-1993": (pd.Timestamp("1979-01-01"), pd.Timestamp("1993-12-01")),
+    "1994-2022": (pd.Timestamp("1994-01-01"), pd.Timestamp("2022-12-01")),
+}
+
+_sel_freq_rows = []
+for _sp_label, (_sp_start, _sp_end) in _subperiods.items():
+    _sp_log   = [k for k, d in zip(_aic_weight_log, _bestaic_dates)
+                 if _sp_start <= d <= _sp_end]
+    _sp_total = len(_sp_log)
+    if _sp_total == 0:
         continue
-    _arr = np.array(_log)
-    _darr = np.array(_date_list)
-    print(f"\n  {_label} K selection diagnostics:")
-    print(f"  {'Period':<20s}  {'K':>3s}  {'# selected':>11s}  {'% selected':>11s}  {'mean K':>7s}  {'std K':>7s}")
-    for _plabel, _pmask in [("Full sample",  np.ones(len(_arr), dtype=bool)),
-                             ("Pre-1994",     _darr <= _PRE94),
-                             ("Post-1994",    _darr >= _POST94)]:
-        _sub = _arr[_pmask]
-        if len(_sub) == 0:
-            continue
-        for K in ALL_K:
-            _cnt = int(np.sum(_sub == K))
-            _pct = 100 * _cnt / len(_sub)
-            print(f"  {_plabel:<20s}  {K:3d}  {_cnt:11d}  {_pct:10.1f}%  {_sub.mean():7.2f}  {_sub.std():7.2f}")
+    for K in ALL_K:
+        _cnt = sum(1 for k in _sp_log if k == K)
+        _pct = round(100 * _cnt / _sp_total, 1)
+        if _cnt > 0:
+            _sel_freq_rows.append({
+                "Period":  _sp_label,
+                "K":       K,
+                "n":       _sp_total,
+                "count":   _cnt,
+                "pct":     _pct,
+            })
 
+_sel_freq_df = pd.DataFrame(_sel_freq_rows)
 
-# ── Attach sPCA forecasts to combined frames ─────────────────────────────────
+print("\n  AIC Factor Selection Frequency (%) by Subperiod:")
+_pivot = _sel_freq_df.pivot_table(
+    index="K", columns="Period", values="pct", aggfunc="first"
+)[["1979-2022", "1979-1993", "1994-2022"]]
+print(_pivot.to_string())
+
+with pd.ExcelWriter(out_path2, engine="openpyxl", mode="a",
+                    if_sheet_exists="replace") as writer:
+    _sel_freq_df.to_excel(writer, sheet_name="AIC_factor_selection", index=False)
+
+print(f"AIC factor selection frequency saved to: {out_path2}")
+
+# ── Attach sPCA forecasts to combined frames ─────────────────────────
 for K in ALL_K:
     col_spca = f"predicted_spca_K{K}"
     combined = pd.merge(combined, spca_results[K][["date", col_spca]], on="date", how="left")
 
-# Attach adaptive-K forecasts
-combined = pd.merge(combined, spca_aicis_df[["date", "predicted_spca_AIC_IS"]], on="date", how="left")
-combined = pd.merge(combined, spca_er_df[["date", "predicted_spca_ER"]], on="date", how="left")
+# Attach best-AIC forecasts
+combined = pd.merge(combined, spca_bestaic_df[["date", "predicted_spca_bestAIC"]], on="date", how="left")
 
 
 # ── Save ─────────────────────────────────────────────────────────────────────
@@ -700,10 +593,10 @@ with pd.ExcelWriter(out_path2, engine="openpyxl", mode="a",
     for K in ALL_K:
         spca_results[K].to_excel(writer, sheet_name=f"sPCA_K{K}", index=False)
 
-print(f"sPCA predictions and idiosyncratic cov saved in: {out_path2}")
+print(f"sPCA predictions: {out_path2}")
 
 ##################################################
-# Table 2: AIC and BIC for direct sPCA          #
+# Table 2: AIC and BIC for direct sPCA          
 ##################################################
 # AIC = n*ln(RSS/n) + 2*k,  BIC = n*ln(RSS/n) + k*ln(n)
 # k = K+1 (K factors + intercept)
@@ -742,10 +635,9 @@ for K in ALL_K:
 _aic_df    = pd.DataFrame(_aic_rows)
 _aic_pivot = _aic_df.pivot_table(index=["Panel", "K"], columns="Period", values="Value", aggfunc="first")
 _aic_pivot = _aic_pivot[["1979-1993", "1979-2022", "1994-2022"]]
-_aic_pivot["Delta"] = _aic_pivot["1994-2022"] - _aic_pivot["1979-2022"]
 print(_aic_pivot.to_string(float_format=lambda x: f"{x:.4f}"))
 
-# ── Save AIC/BIC ──────────────────────────────────────────────────────────────
+# Save AIC/BIC 
 with pd.ExcelWriter(out_path2, engine="openpyxl", mode="a",
                     if_sheet_exists="replace") as writer:
     _aic_df.to_excel(writer, sheet_name="AIC_BIC_sPCA", index=False)
@@ -754,9 +646,8 @@ print(f"AIC/BIC saved to: {out_path2}")
 
 
 ##################################################
-# R²_OS — Campbell & Thompson (2008)            #
+# R²_OS             
 ##################################################
-# Equation (13):
 #   R²_OS = 1 - Σ_t (r_{t+1} - r̂_{t+1})² / Σ_t (r_{t+1} - r̄_t)²
 #
 # r̄_t  : prevailing historical mean (expanding window, Goyal & Welch 2008)
@@ -764,6 +655,7 @@ print(f"AIC/BIC saved to: {out_path2}")
 #
 # Results are reported over two periods:
 #   Full sample  : Q1 1979 – Q4 2022 (1979-01 to 2022-12)
+#   Pre-1994     : Q1 1979 - Q4 1993 (1979-01 to 1993-12)
 #   Post-1994    : Q1 1994 – Q4 2022 (1994-01 to 2022-12)
 #
 # Significance is assessed using the Clark & West (2007) one-sided test.
@@ -778,17 +670,12 @@ FULL_START   = pd.Timestamp("1979-01-01")
 FULL_END     = pd.Timestamp("2022-12-01")
 PRE94_END    = pd.Timestamp("1993-12-01")
 POST94_START = pd.Timestamp("1994-01-01")
-DEC2005_END  = pd.Timestamp("2005-12-01")
 OOS79_START  = pd.Timestamp("1979-01-01")
 
 PERIODS = {
-    "Full OOS (1979 Q1 – 2022 Q4)":      (OOS79_START,  FULL_END),
-    "Full OOS (1979 Q1 – 2005 Q4)":      (OOS79_START,  DEC2005_END),
-    "Full (1979 Q1 – 2022 Q4)":          (FULL_START,   FULL_END),
-    "Full (1979 Q1 – 2005 Q4)":          (FULL_START,   DEC2005_END),
-    "Pre-1994 (1979 Q1 – 1993 Q4)":      (FULL_START,   PRE94_END),
-    "Post-1994 (1994 Q1 – 2022 Q4)":     (POST94_START, FULL_END),
-    "Post-1994 (1994 Q1 – 2005 Q4)":     (POST94_START, DEC2005_END),
+    "Full (1979–2022)":       (FULL_START,   FULL_END),
+    "Pre-1994 (1979–1993)":   (FULL_START,   PRE94_END),
+    "Post-1994 (1994–2022)":  (POST94_START, FULL_END),
 }
 
 # Merge the prevailing-mean benchmark onto the combined predictions frame
@@ -830,23 +717,6 @@ for period_label, (p_start, p_end) in PERIODS.items():
     mask   = (eval_df["date"] >= p_start) & (eval_df["date"] <= p_end)
     sub    = eval_df[mask].copy()
 
-    for pred in forecast_cols:
-        valid = sub[["eqprem", pred, "predicted_HM"]].dropna()
-        if len(valid) < 10:
-            continue
-        a, p, bm = valid["eqprem"].values, valid[pred].values, valid["predicted_HM"].values
-        r2      = r2_os(a, p, bm)
-        t, pval = clark_west(a, p, bm)
-
-        r2_rows.append({
-            "Period":      period_label,
-            "Predictor":   pred,
-            "n":           len(valid),
-            "R2_OS (%)":   round(r2 * 100, 2),
-            "CW t-stat":   round(t,    3),
-            "CW p-value":  round(pval, 4),
-        })
-
     valid_1n = sub[["eqprem", "predicted_1N", "predicted_HM"]].dropna()
     if len(valid_1n) >= 10:
         a, p, bm = valid_1n["eqprem"].values, valid_1n["predicted_1N"].values, valid_1n["predicted_HM"].values
@@ -883,9 +753,8 @@ for period_label, (p_start, p_end) in PERIODS.items():
             "CW p-value":  round(pval, 4),
         })
 
-    # sPCA adaptive-K (AIC-IS and ER)
-    for _ba_col, _ba_label in [("predicted_spca_AIC_IS", "sPCA (AIC-IS)"),
-                                ("predicted_spca_ER",     "sPCA (ER)")]:
+    # sPCA best-AIC
+    for _ba_col, _ba_label in [("predicted_spca_bestAIC", "sPCA best-AIC")]:
         if _ba_col not in sub.columns:
             continue
         valid_ba = sub[["eqprem", _ba_col, "predicted_HM"]].dropna()
@@ -914,7 +783,7 @@ for period_label in PERIODS:
         .to_string(index=False)
     )
 
-# ── Save to Excel ──────────────────────────────────────────────────────────────
+# Save to Excel
 with pd.ExcelWriter(out_path2, engine="openpyxl", mode="a",
                     if_sheet_exists="replace") as writer:
     r2_df.to_excel(writer, sheet_name="R2_OS", index=False)
@@ -922,27 +791,26 @@ with pd.ExcelWriter(out_path2, engine="openpyxl", mode="a",
 print(f"\nR²_OS table saved to sheet 'R2_OS' in: {out_path2}")
 
 ##################################################
-# CER Gain (Campbell & Thompson 2008, eq. 14)   #
+# CER Gain (Campbell & Thompson 2008)   
 ##################################################
-# Mean-variance investor with risk aversion γ = 3.
+# Mean-variance investor with risk aversion γ = 3
 # Portfolio weight in equity at time t:
 #   w_t = (1/γ) * r̂_{t+1} / σ̂²_{t+1},  clipped to [0, 1.5]
 # where σ̂²_{t+1} is the 40-quarter rolling variance of realised returns,
-# lagged by 1 quarter (estimated using only data up to t).
+# lagged by 1 quarter (estimated using only data up to t)
 #
 # CER of a strategy:
 #   v̂ = mean(w_t * r_{t+1}) - (γ/2) * var(w_t * r_{t+1})
-# annualised (×12) and expressed in basis points (×10000).
+# annualised and expressed in basis points (×10000)
 #
 # CER gain = v̂_model - v̂_benchmark  (benchmark = historical mean)
 #
-# 90% bootstrap confidence interval (Politis & Romano 1994 stationary bootstrap,
-# approximated here with iid block bootstrap, B=1000 draws).
+# 90% bootstrap confidence interval
 #
 # Breakeven TC: the round-trip transaction cost τ (in bps) such that the net
-# CER gain = 0, where net CER = gross CER - τ × mean |Δw_t| × 12 × 10000.
+# CER gain = 0, where net CER = gross CER - τ × mean |Δw_t| × 12 × 10000
 
-print("\nComputing CER gain (eq. 14) ...")
+print("\nComputing CER gain ...")
 
 GAMMA      = 3.0
 # VAR_WINDOW = 120 months (10 years)
@@ -965,12 +833,9 @@ cer_df = cer_df.dropna(subset=["sigma2"]).reset_index(drop=True)
 
 # Merge all forecast columns onto cer_df
 all_forecast_model_cols = (
-    [f"predicted_{p}" for p in PREDICTORS]
-    + ["predicted_1N"]
+    ["predicted_1N"]
     + [f"predicted_spca_K{K}" for K in ALL_K]
-    + ["predicted_spca_AIC_IS"]
-    + ["predicted_spca_ER"]
-    + [f"predicted_CW_W{W}" for W in _VAR_PLOT_W]
+    + ["predicted_spca_bestAIC"]
     + ["predicted_HM"]
 )
 for col in all_forecast_model_cols:
@@ -1082,8 +947,7 @@ for period_label, (p_start, p_end) in PERIODS.items():
         label = (col
                  .replace("predicted_", "")
                  .replace("_1N", "1/N")
-                 .replace("spca_K", "sPCA K=")
-                 .replace("CW_W", "CW W="))
+                 .replace("spca_K", "sPCA K="))
         cer_rows.append({
             "Period":           period_label,
             "Model":            label,
@@ -1110,12 +974,12 @@ with pd.ExcelWriter(out_path2, engine="openpyxl", mode="a",
 print(f"\nCER gain table saved to sheet 'CER_gain' in: {out_path2}")
 
 ##################################################
-# Plots — S^fr and |S_t| over time              #
+# Plots: S^fr over time              
 ##################################################
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
-print("\nPlotting S^fr and |S_t| ...")
+print("\nPlotting S^fr ...")
 
 # Colourblind-safe palette (Wong 2011)
 _CB_COLORS = ["#0072B2", "#D55E00", "#009E73"]
@@ -1168,8 +1032,8 @@ print("  Saved: plot_S_p_combined_monthly_restricted.png")
 print("All S^fr / S^p plots saved.")
 
 ##################################################
-# Plot — Average predictor change vs Eq. Prem   #
-# 1994 M1 – 2000 M12                            #
+# Plot — Average predictor change vs Eq. Prem   
+# 1994 M1 – 2000 M12                            
 ##################################################
 
 print("\nPlotting average predictor change vs equity premium (1994–2000) ...")
@@ -1249,29 +1113,23 @@ plt.close(fig)
 # Weights:  w_{i,t} = DMSFE_{i,t}^{-1} / sum_j DMSFE_{j,t}^{-1}
 # Forecast: r_hat_DMSFE_{t+1} = sum_i w_{i,t} * r_hat_{i,t+1}
 #
-# delta in {0.90, 0.95, 1.0}.  delta=1 recovers undiscounted MSFE weights.
-# At t=0 (no prior error history) equal (1/N) weights are used.
+# delta in {0.95, 0.99, 1.0}.  delta=1 recovers undiscounted MSFE weights
+# At t=0 equal (1/N) weights are used
 #
 # Implementation note: the forecast stored at row t uses weights whose
-# DMSFE accumulator was last updated at row t-1, i.e. only past errors
-# are used — no look-ahead.
+# DMSFE accumulator was last updated at row t-1, only past errors
+# are used
 #
 # Evaluation: same R²_OS, Clark–West, CER gain (+bootstrap CI, breakeven TC)
-# as all other methods, over all PERIODS defined above.
-#
-# Weight diagnostics: cross-sectional weight dispersion, effective N
-# (Herfindahl inverse), compared pre- vs post-1994.
-#
-# DMSFE S^fr: rolling Spearman correlation between the DMSFE combination
-# forecast and realised equity premium, for WINDOWS defined above.
+# as all other methods, over all PERIODS defined above
 
 print("\n" + "=" * 60)
 print("Discounted MSFE Combination Weights  [Stock & Watson 2004]")
 print("=" * 60)
 
-DMSFE_DELTAS = [0.95, 0.99, 1.00]
+DMSFE_DELTAS = [0.90, 0.95, 1.00]
 
-# ── OOS window ────────────────────────────────────────────────────────────
+# OOS window 
 _dm_oos = (
     eval_df[
         (eval_df["date"] >= OOS79_START) & (eval_df["date"] <= FULL_END)
@@ -1302,7 +1160,7 @@ for _dl in DMSFE_DELTAS:
 
     for _t in range(_T_dm):
 
-        # ── Step 1: form DMSFE forecast at period t using weights from t-1
+        # Step 1: form DMSFE forecast at period t using weights from t-1
         _f_t = _dm_P[_t]                        # (N,) individual forecasts
         _ok  = ~np.isnan(_f_t)
         if _ok.any():
@@ -1312,14 +1170,14 @@ for _dl in DMSFE_DELTAS:
                 _preds[_t] = np.dot(_w / _ws, np.where(_ok, _f_t, 0.0))
         _wts_ts[_t] = _dmsfe_wt.copy()
 
-        # ── Step 2: update DMSFE with the squared error observed at period t
+        # Step 2: update DMSFE with the squared error observed at period t
         _r_t = _dm_r[_t]
         if not np.isnan(_r_t):
             _e2  = np.where(_ok, (_r_t - _f_t) ** 2, np.nan)
             _upd = ~np.isnan(_e2)
             _dmsfe_acc[_upd] = _dl * _dmsfe_acc[_upd] + _e2[_upd]
 
-        # ── Step 3: update weights for period t+1
+        # Step 3: update weights for period t+1
         _pos = _dmsfe_acc > 0
         if _pos.any():
             _inv = np.where(_pos, 1.0 / np.where(_pos, _dmsfe_acc, 1.0), 0.0)
@@ -1327,7 +1185,7 @@ for _dl in DMSFE_DELTAS:
             _dmsfe_wt = _inv / _s if _s > 0 else np.ones(_N_dm) / _N_dm
 
     _col = f"predicted_DMSFE_{int(round(_dl * 100))}"
-    _dmsfe_results[_dl] = {"col": _col, "forecast": _preds, "weights": _wts_ts}
+    _dmsfe_results[_dl] = {"col": _col, "forecast": _preds}
 
     # Merge into eval_df and cer_df
     _tmp = pd.DataFrame({"date": _dm_oos["date"].values, _col: _preds})
@@ -1337,7 +1195,7 @@ for _dl in DMSFE_DELTAS:
     _n_v = int(np.sum(~np.isnan(_preds)))
     print(f"  delta={_dl:.2f}  col='{_col}'  valid={_n_v}/{_T_dm}")
 
-# ── R²_OS + Clark–West ────────────────────────────────────────────────────
+# R²_OS + Clark–West 
 print("\n  R²_OS — DMSFE forecasts")
 _dm_r2_rows = []
 
@@ -1375,7 +1233,7 @@ for _pl in PERIODS:
             .to_string(index=False)
         )
 
-# ── CER gain ──────────────────────────────────────────────────────────────
+# CER gain
 print("\n  CER Gain — DMSFE forecasts")
 _dm_cer_rows = []
 
@@ -1409,69 +1267,7 @@ for _pl in PERIODS:
         print(f"\n  {_pl}")
         print(_tbl.drop(columns="Period").to_string(index=False))
 
-# ── Weight diagnostics ────────────────────────────────────────────────────
-print("\n  DMSFE Weight Diagnostics")
-_dm_wdiag_rows = []
-_dm_dates_idx  = pd.DatetimeIndex(_dm_oos["date"].values)
-
-for _dl, _d in _dmsfe_results.items():
-    _wts = _d["weights"]                  # (T, N)
-    for _pl, (_ps, _pe) in PERIODS.items():
-        _m    = (_dm_dates_idx >= _ps) & (_dm_dates_idx <= _pe)
-        _wp   = _wts[_m]                  # (T_p, N)
-        # Restrict to rows without NaN (post-burn-in)
-        _ok   = ~np.isnan(_wp).any(axis=1)
-        if _ok.sum() < 2:
-            continue
-        _wp = _wp[_ok]
-        _dm_wdiag_rows.append({
-            "Period":          _pl,
-            "delta":           _dl,
-            "n":               int(_ok.sum()),
-            "avg weight std":  round(float(np.mean(np.std(_wp, axis=1))),   6),
-            "avg max weight":  round(float(np.mean(np.max(_wp, axis=1))),   4),
-            "avg min weight":  round(float(np.mean(np.min(_wp, axis=1))),   4),
-            "avg eff N":       round(float(np.mean(1.0 / np.sum(_wp**2, axis=1))), 2),
-        })
-
-_dm_wdiag_df = pd.DataFrame(_dm_wdiag_rows)
-_dm_wdiag_sub = _dm_wdiag_df[
-    _dm_wdiag_df["Period"].str.contains("Pre-1994|Post-1994|Full \\(1979", regex=True)
-].copy()
-if not _dm_wdiag_sub.empty:
-    print(_dm_wdiag_sub.to_string(index=False))
-
-# ── DMSFE S^fr: rolling Spearman correlation ──────────────────────────────
-print("\n  DMSFE S^fr (rolling Spearman, actual returns vs DMSFE forecast)")
-
-_dm_sfr_rows = []
-
-for _dl, _d in _dmsfe_results.items():
-    _fc_ser  = pd.Series(
-        _d["forecast"], index=pd.DatetimeIndex(_dm_oos["date"].values)
-    )
-    _act_ser = pd.Series(
-        _dm_r, index=pd.DatetimeIndex(_dm_oos["date"].values)
-    )
-    _T_sfr = len(_act_ser)
-
-    for W in WINDOWS:
-        _rows = []
-        for _t in range(W, _T_sfr + 1):
-            _r_w = _act_ser.iloc[_t - W:_t].values
-            _f_w = _fc_ser.iloc[_t - W:_t].values
-            _dt  = _act_ser.index[_t - 1]
-            if (not np.isnan(_f_w).any()) and np.std(_f_w) > 0:
-                _rho, _ = spearmanr(_r_w, _f_w)
-            else:
-                _rho = np.nan
-            _rows.append({"date": _dt, "delta": _dl, "W": W,
-                          "S_fr_DMSFE": round(_rho, 6) if not np.isnan(_rho) else np.nan})
-        _dm_sfr_rows.extend(_rows)
-
-_dm_sfr_df = pd.DataFrame(_dm_sfr_rows)
-
-# ── Save all DMSFE results to Excel ───────────────────────────────────────
+# Save all DMSFE results to Excel
 print(f"\n  Saving DMSFE results to {out_path2} ...")
 
 with pd.ExcelWriter(out_path2, engine="openpyxl", mode="a",
@@ -1479,36 +1275,23 @@ with pd.ExcelWriter(out_path2, engine="openpyxl", mode="a",
 
     _dm_r2_df.to_excel(writer, sheet_name="DMSFE_R2OS", index=False)
     _dm_cer_df.to_excel(writer, sheet_name="DMSFE_CER", index=False)
-    _dm_wdiag_df.to_excel(writer, sheet_name="DMSFE_wdiag", index=False)
-    _dm_sfr_df.to_excel(writer, sheet_name="DMSFE_Sfr", index=False)
-
-    # Weight time series — one sheet per delta
-    for _dl, _d in _dmsfe_results.items():
-        _wts_df = pd.DataFrame(
-            _d["weights"], columns=[f"w_{p}" for p in _fc_arr]
-        )
-        _wts_df.insert(0, "date",     _dm_oos["date"].values)
-        _wts_df.insert(1, "forecast", _d["forecast"])
-        _sheet = f"DMSFE_w_{int(round(_dl*100))}"
-        _wts_df.to_excel(writer, sheet_name=_sheet[:31], index=False)
 
 print("  DMSFE results saved.")
-print("\nDMSFE combination weights complete.")
 
 ##################################################
-# Discounted OLS (DOLS) Bivariate + 1/N         #
-# Exponential decay WLS  delta in {0.97,0.99,0.995} #
+# Discounted OLS (DOLS) Bivariate + 1/N         
+# Exponential decay WLS  delta in {0.98851, 0.99424, 0.99616} 
 ##################################################
 #
 # For each predictor i and OOS origin t, estimate bivariate WLS:
 #   r_{s+1} = alpha_i + beta_i * x_{i,s} + eps
-# with weights w_s = delta^(t-s) / sum_j delta^(t-j)  (normalised).
-# Most recent observation gets weight proportional to 1.
+# with weights w_s = delta^(t-s) / sum_j delta^(t-j)  (normalised)
+# Most recent observation gets weight proportional to 1
 #
 # 1/N combination: r_hat_DOLS_{t+1} = (1/N) * sum_i r_hat_{i,t+1}
 #
-# CT restriction: wrong-sign beta set to 0 (restricted).
-# Non-negative constraint: max(0, y_hat) at individual level.
+# CT restriction: wrong-sign beta set to 0 (restricted)
+# Non-negative constraint: max(0, y_hat) at individual level
 
 print("\n" + "=" * 60)
 print("Discounted OLS (DOLS)  [exponential decay WLS, restricted]")
@@ -1516,7 +1299,7 @@ print("=" * 60)
 
 DOLS_DELTAS = [0.98851, 0.99424, 0.99616]
 
-# ── OOS window ────────────────────────────────────────────────────────────
+# OOS window
 _dols_oos = (
     eval_df[
         (eval_df["date"] >= FORECAST_START) & (eval_df["date"] <= FULL_END)
@@ -1600,7 +1383,7 @@ for _i, _p in enumerate(forecast_cols):
 
 print(f"  WLS loops complete ({time.time() - _dols_start:.1f}s)")
 
-# ── 1/N combination + merge into eval_df / cer_df ─────────────────────────
+# 1/N combination + merge into eval_df / cer_df 
 _dols_results = {}
 
 for _dl in DOLS_DELTAS:
@@ -1616,7 +1399,7 @@ for _dl in DOLS_DELTAS:
     _nv = int(np.sum(~np.isnan(_fc_1n)))
     print(f"  delta={_dl}: {_nv}/{_T_dols} valid 1/N forecasts  col={_col}")
 
-# ── R²_OS + Clark–West ────────────────────────────────────────────────────
+# R²_OS + Clark–West 
 print("\n  R²_OS — DOLS forecasts")
 _dols_r2_rows = []
 
@@ -1652,7 +1435,7 @@ for _pl in PERIODS:
         print(f"\n  {_pl}")
         print(_tbl.drop(columns="Period").to_string(index=False))
 
-# ── CER Gain ──────────────────────────────────────────────────────────────
+# CER Gain 
 print("\n  CER Gain — DOLS forecasts")
 _dols_cer_rows = []
 
@@ -1686,7 +1469,7 @@ for _pl in PERIODS:
         print(f"\n  {_pl}")
         print(_tbl.drop(columns="Period").to_string(index=False))
 
-# ── DOLS S^fr (rolling Spearman) ──────────────────────────────────────────
+# DOLS S^fr (rolling Spearman) 
 print("\n  DOLS S^fr (rolling Spearman, actual returns vs DOLS 1/N forecast)")
 
 _dols_sfr_rows = []
@@ -1734,44 +1517,6 @@ with pd.ExcelWriter(out_path2, engine="openpyxl", mode="a",
 
 print("  DOLS results saved.")
 
-# ── DOLS S^p (rolling pairwise Spearman among individual DOLS forecasts) ──
-print("\n  DOLS S^p (rolling pairwise Spearman among individual forecasts)")
-
-_dols_sp_rows = []
-
-for _dl in DOLS_DELTAS:
-    _P_dl = _dols_P_all[_dl]   # (T, N)
-    for W in WINDOWS:
-        for _t_idx in range(_T_dols):
-            if _t_idx < W - 1:
-                continue
-            _dt      = pd.Timestamp(_oos_dates_dols[_t_idx])
-            _P_win   = _P_dl[_t_idx - W + 1: _t_idx + 1, :]   # (W, N)
-            _ok_cols = ~np.isnan(_P_win).any(axis=0)
-            _n_ok    = _ok_cols.sum()
-            if _n_ok < 2:
-                _sp_val = np.nan
-            else:
-                _P_ok    = _P_win[:, _ok_cols]
-                _P_ranked = np.apply_along_axis(rankdata, 0, _P_ok)
-                _corr_mat = np.corrcoef(_P_ranked.T)
-                _upper    = np.triu_indices(_n_ok, k=1)
-                _sp_val   = float(np.nanmean(_corr_mat[_upper]))
-            _dols_sp_rows.append({
-                "date":      _dt,
-                "delta":     _dl,
-                "W":         W,
-                "S_p_DOLS":  round(_sp_val, 6) if not np.isnan(_sp_val) else np.nan,
-            })
-
-_dols_sp_df = pd.DataFrame(_dols_sp_rows)
-
-with pd.ExcelWriter(out_path2, engine="openpyxl", mode="a",
-                    if_sheet_exists="replace") as writer:
-    _dols_sp_df.to_excel(writer, sheet_name="DOLS_Sp", index=False)
-
-print("  DOLS S^p saved.")
-
 # ── DOLS S^fr plots (one per delta) ───────────────────────────────────────
 print("\n  Plotting DOLS S^fr and S^p ...")
 
@@ -1803,38 +1548,13 @@ for _dl in DOLS_DELTAS:
     plt.close(fig)
     print(f"    Saved: {_fname}")
 
-for _dl in DOLS_DELTAS:
-    _sub_sp = _dols_sp_df[_dols_sp_df["delta"] == _dl]
-
-    fig, ax = plt.subplots(figsize=(11, 4))
-    for idx, W in enumerate(WINDOWS):
-        _w_sub = _sub_sp[_sub_sp["W"] == W].sort_values("date")
-        ax.plot(_w_sub["date"], _w_sub["S_p_DOLS"],
-                color=_CB_COLORS_DOLS[idx], linestyle=_CB_STYLES_DOLS[idx],
-                linewidth=1.3, label=f"W={W} months")
-    ax.axhline(0, color="black", linewidth=0.7, linestyle="--")
-    ax.set_xlabel("Date", fontsize=14)
-    ax.set_ylabel("S$^{p}$ (DOLS)", fontsize=14)
-    ax.xaxis.set_major_locator(mdates.YearLocator(5))
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
-    ax.set_xlim(left=pd.Timestamp("1979-01-01"), right=pd.Timestamp("2025-01-01"))
-    plt.xticks(rotation=45)
-    ax.tick_params(axis="both", labelsize=12)
-    ax.legend(fontsize=13)
-    ax.grid(True, alpha=0.3)
-    fig.tight_layout()
-    _fname = f"plot_DOLS_S_p_delta{int(round(_dl*100000))}_monthly_restricted.png"
-    fig.savefig(_fname, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"    Saved: {_fname}")
-
-print("  DOLS S^fr / S^p plots saved.")
+print("  DOLS S^fr plots saved.")
 print("\nDiscounted OLS (DOLS) complete.")
 
 print("  Saved: plot_pred_vs_eqprem_1994_2000_monthly_restricted.png")
 
 ##################################################
-# Return Variance Over Time (all windows)        #
+# Return Variance Over Time (all windows)        
 ##################################################
 
 print("\nPlotting return variance over time ...")
