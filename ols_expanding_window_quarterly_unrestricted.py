@@ -8,7 +8,7 @@ from scipy.stats import spearmanr, rankdata
 warnings.filterwarnings("ignore", "invalid value", RuntimeWarning)
 
 # ── Load data ──────────────────────────────────────────────────────────────────
-df = pd.read_excel(r"C:\Users\ruben\Downloads\Data_Seminar.xlsx", sheet_name="Quarterly")
+df = pd.read_excel("Data_Seminar.xlsx", sheet_name="Quarterly")
 # yyyyq format: 19471 = 1947 Q1; Q1→Jan, Q2→Apr, Q3→Jul, Q4→Oct
 _year  = df["yyyyq"] // 10
 _qtr   = df["yyyyq"] % 10

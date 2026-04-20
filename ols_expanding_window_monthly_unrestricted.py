@@ -9,7 +9,7 @@ from scipy.stats import spearmanr, rankdata
 warnings.filterwarnings("ignore", "invalid value", RuntimeWarning)
 
 # Load data 
-df = pd.read_excel(r"C:\Users\ruben\Downloads\Data_Seminar.xlsx", sheet_name="Monthly")
+df = pd.read_excel("Data_Seminar.xlsx", sheet_name="Monthly")
 df = df.drop(columns=["i/k (NOT HERE)"], errors="ignore")
 df["date"] = pd.to_datetime(df["yyyymm"].astype(str), format="%Y%m")
 # Rename: use "log eqprem" for all predictions/metrics; keep "simple eqprem" for CER only
