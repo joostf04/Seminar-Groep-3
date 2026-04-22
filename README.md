@@ -6,12 +6,15 @@ Out-of-sample equity premium forecasting using OLS expanding-window regressions 
 
 ## Structure
 
-```
-├── Data_Seminar.xlsx                              ← data
+```text
+├── Data_Seminar.xlsx                              ← dataset
+├── Rolling Window RESTRICTED.py
+├── Rolling Window UNRESTRICTED.py
 ├── ols_expanding_window_monthly_unrestricted.py
 ├── ols_expanding_window_monthly_restricted.py
 ├── ols_expanding_window_quarterly_unrestricted.py
 ├── ols_expanding_window_quarterly_restricted.py
+├── PredEQpremPlots.py
 └── README.md
 ```
 
@@ -25,9 +28,12 @@ Out-of-sample equity premium forecasting using OLS expanding-window regressions 
 | `ols_expanding_window_quarterly_restricted.py` | Quarterly forecasts, CT sign restrictions |
 | `ols_expanding_window_monthly_unrestricted.py` | Monthly forecasts, no restrictions |
 | `ols_expanding_window_monthly_restricted.py` | Monthly forecasts, CT sign restrictions |
+| `Rolling Window RESTRICTED.py` | Rolling window forecasts with CT sign restrictions |
+| `Rolling Window UNRESTRICTED.py` | Rolling window forecasts without restrictions |
+| `PredEQpremPlots.py` | Script for generating positive and negative predictor average together with equity premium |
 
-Each script runs the full pipeline: bivariate OLS forecasts, 1/N combination, sPCA, OOS R², CER gain, DMSFE, DOLS, QLR structural break test, and diagnostic plots. Results are saved to an Excel workbook and PNG/PDF plots in the same folder.
 
+The rolling window scripts contain the rolling window estimation results, complementing the expanding window approach.
 ---
 
 ## Requirements
